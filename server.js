@@ -192,6 +192,7 @@ async function fetchTeamRoster(teamCode) {
   for (const def of defenders) {
     const statsData = await fetchRealPlayerStats(def.name, 'DEF', teamCode);
     roster.defense.push({
+      playerId: def.id,
       name: def.name,
       position: def.position,
       number: def.number,
@@ -1675,14 +1676,32 @@ app.get('/api/same-game-parlay', async (req, res) => {
       'SF': 'Brock Purdy',
       'TB': 'Baker Mayfield',
       'KC': 'Patrick Mahomes',
-      'BUF': 'Josh Allen'
+      'BUF': 'Josh Allen',
+      'BAL': 'Lamar Jackson',
+      'CIN': 'Joe Burrow',
+      'DET': 'Jared Goff',
+      'GB': 'Jordan Love',
+      'PHI': 'Jalen Hurts',
+      'DAL': 'Dak Prescott',
+      'MIN': 'Sam Darnold',
+      'LAR': 'Matthew Stafford',
+      'PIT': 'Russell Wilson',
+      'HOU': 'C.J. Stroud',
+      'MIA': 'Tua Tagovailoa',
+      'DEN': 'Bo Nix',
+      'LAC': 'Justin Herbert',
+      'WAS': 'Jayden Daniels'
       // Add more as needed
     };
     
-    // Home QB - prioritize known starter, otherwise select QB with most games played
+    // Home QB - ALWAYS prioritize known starter if team has one
     let homeQB = null;
     if (knownStarters[homeTeam]) {
-      homeQB = homePlayers.find(p => p.position === 'QB' && p.name === knownStarters[homeTeam] && p.passYards > 0);
+      homeQB = homePlayers.find(p => p.position === 'QB' && p.name === knownStarters[homeTeam]);
+      if (!homeQB) {
+        // If known starter not found, try partial name match
+        homeQB = homePlayers.find(p => p.position === 'QB' && knownStarters[homeTeam].includes(p.name.split(' ').pop()));
+      }
     }
     if (!homeQB) {
       homeQB = homePlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
@@ -1710,10 +1729,14 @@ app.get('/api/same-game-parlay', async (req, res) => {
       console.log(`⚠️  ${homeQB.name} not in active roster for ${homeTeam}`);
     }
     
-    // Away QB - prioritize known starter, otherwise select QB with most games played
+    // Away QB - ALWAYS prioritize known starter if team has one
     let awayQB = null;
     if (knownStarters[awayTeam]) {
-      awayQB = awayPlayers.find(p => p.position === 'QB' && p.name === knownStarters[awayTeam] && p.passYards > 0);
+      awayQB = awayPlayers.find(p => p.position === 'QB' && p.name === knownStarters[awayTeam]);
+      if (!awayQB) {
+        // If known starter not found, try partial name match
+        awayQB = awayPlayers.find(p => p.position === 'QB' && knownStarters[awayTeam].includes(p.name.split(' ').pop()));
+      }
     }
     if (!awayQB) {
       awayQB = awayPlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)

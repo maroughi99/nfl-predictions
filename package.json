@@ -4,7 +4,7 @@
   "description": "AI-powered NFL game analyzer and prediction system",
   "main": "server.js",
   "engines": {
-    "node": "18.x"
+    "node": "22.x"
   },
   "scripts": {
     "start": "node server.js",

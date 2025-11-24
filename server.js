@@ -1180,105 +1180,111 @@ function generateKeyFactors(stats1, stats2, team1, team2, weather, isTeam1Home) 
 
 // NBA Win Probability Algorithm
 async function calculateNBAWinProbability(team1Code, team2Code, isTeam1Home) {
-  const team1Stats = await getNBATeamStats(team1Code);
-  const team2Stats = await getNBATeamStats(team2Code);
-  
-  // 1. SCORING DIFFERENTIAL (Weight: 20%)
-  const ppgDiff = parseFloat(team1Stats.pointsPerGame) - parseFloat(team2Stats.pointsPerGame);
-  const scoringScore = ppgDiff * 0.8;
-  
-  // 2. HOME COURT ADVANTAGE (Weight: 8%)
-  const homeCourtScore = isTeam1Home ? 8 : -8;
-  
-  // 3. SHOOTING EFFICIENCY (Weight: 18%)
-  const fgDiff = parseFloat(team1Stats.fgPct) - parseFloat(team2Stats.fgPct);
-  const fg3Diff = parseFloat(team1Stats.fg3Pct) - parseFloat(team2Stats.fg3Pct);
-  const shootingScore = (fgDiff * 0.4) + (fg3Diff * 0.35);
-  
-  // 4. REBOUNDING (Weight: 12%)
-  const rebDiff = parseFloat(team1Stats.reboundsPerGame) - parseFloat(team2Stats.reboundsPerGame);
-  const reboundingScore = rebDiff * 0.6;
-  
-  // 5. BALL MOVEMENT & ASSISTS (Weight: 10%)
-  const astDiff = parseFloat(team1Stats.assistsPerGame) - parseFloat(team2Stats.assistsPerGame);
-  const assistScore = astDiff * 0.8;
-  
-  // 6. DEFENSE (Weight: 15%)
-  const defDiff = parseFloat(team2Stats.defensiveRating) - parseFloat(team1Stats.defensiveRating);
-  const defenseScore = defDiff * 0.15;
-  
-  // 7. PACE & TEMPO (Weight: 7%)
-  const pace1 = parseFloat(team1Stats.pace);
-  const pace2 = parseFloat(team2Stats.pace);
-  const avgPace = (pace1 + pace2) / 2;
-  const paceScore = (avgPace - 98) * 0.1;
-  
-  // 8. TURNOVERS (Weight: 10%)
-  const toDiff = parseFloat(team2Stats.turnoversPerGame) - parseFloat(team1Stats.turnoversPerGame);
-  const turnoverScore = toDiff * 0.8;
-  
-  // Calculate total score
-  const totalScore = scoringScore + homeCourtScore + shootingScore + 
-                     reboundingScore + assistScore + defenseScore + 
-                     paceScore + turnoverScore;
-  
-  // Convert to probability (0-100)
-  let team1Prob = 50 + totalScore;
-  team1Prob = Math.max(15, Math.min(85, team1Prob));
-  const team2Prob = 100 - team1Prob;
-  
-  // Predict scores - use team averages with slight adjustments based on probability
-  const team1Advantage = (team1Prob - 50) / 100; // Range: -0.35 to +0.35
-  const team2Advantage = (team2Prob - 50) / 100;
-  
-  const team1ProjScore = Math.round(parseFloat(team1Stats.pointsPerGame) * (1 + team1Advantage * 0.3));
-  const team2ProjScore = Math.round(parseFloat(team2Stats.pointsPerGame) * (1 + team2Advantage * 0.3));
-  
-  // Confidence level
-  const probDiff = Math.abs(team1Prob - team2Prob);
-  let confidence = 'Medium';
-  if (probDiff > 25) confidence = 'High';
-  else if (probDiff < 10) confidence = 'Low';
-  
-  // Key factors
-  const factors = [];
-  if (Math.abs(ppgDiff) > 5) {
-    const higherScoring = ppgDiff > 0 ? team1Code : team2Code;
-    factors.push(`${nbaTeams[higherScoring].name} averaging ${Math.abs(ppgDiff).toFixed(1)} more PPG`);
+  try {
+    const team1Stats = await getNBATeamStats(team1Code);
+    const team2Stats = await getNBATeamStats(team2Code);
+    
+    // 1. SCORING DIFFERENTIAL (Weight: 20%)
+    const ppgDiff = parseFloat(team1Stats.pointsPerGame) - parseFloat(team2Stats.pointsPerGame);
+    const scoringScore = ppgDiff * 0.8;
+    
+    // 2. HOME COURT ADVANTAGE (Weight: 8%)
+    const homeCourtScore = isTeam1Home ? 8 : -8;
+    
+    // 3. SHOOTING EFFICIENCY (Weight: 18%)
+    const fgDiff = parseFloat(team1Stats.fgPct) - parseFloat(team2Stats.fgPct);
+    const fg3Diff = parseFloat(team1Stats.fg3Pct) - parseFloat(team2Stats.fg3Pct);
+    const shootingScore = (fgDiff * 0.4) + (fg3Diff * 0.35);
+    
+    // 4. REBOUNDING (Weight: 12%)
+    const rebDiff = parseFloat(team1Stats.reboundsPerGame) - parseFloat(team2Stats.reboundsPerGame);
+    const reboundingScore = rebDiff * 0.6;
+    
+    // 5. BALL MOVEMENT & ASSISTS (Weight: 10%)
+    const astDiff = parseFloat(team1Stats.assistsPerGame) - parseFloat(team2Stats.assistsPerGame);
+    const assistScore = astDiff * 0.8;
+    
+    // 6. DEFENSE (Weight: 15%)
+    const defDiff = parseFloat(team2Stats.defensiveRating) - parseFloat(team1Stats.defensiveRating);
+    const defenseScore = defDiff * 0.15;
+    
+    // 7. PACE & TEMPO (Weight: 7%)
+    const pace1 = parseFloat(team1Stats.pace);
+    const pace2 = parseFloat(team2Stats.pace);
+    const avgPace = (pace1 + pace2) / 2;
+    const paceScore = (avgPace - 98) * 0.1;
+    
+    // 8. TURNOVERS (Weight: 10%)
+    const toDiff = parseFloat(team2Stats.turnoversPerGame) - parseFloat(team1Stats.turnoversPerGame);
+    const turnoverScore = toDiff * 0.8;
+    
+    // Calculate total score
+    const totalScore = scoringScore + homeCourtScore + shootingScore + 
+                       reboundingScore + assistScore + defenseScore + 
+                       paceScore + turnoverScore;
+    
+    // Convert to probability (0-100)
+    let team1Prob = 50 + totalScore;
+    team1Prob = Math.max(15, Math.min(85, team1Prob));
+    const team2Prob = 100 - team1Prob;
+    
+    // Predict scores - use team averages with slight adjustments based on probability
+    const team1Advantage = (team1Prob - 50) / 100; // Range: -0.35 to +0.35
+    const team2Advantage = (team2Prob - 50) / 100;
+    
+    const team1ProjScore = Math.round(parseFloat(team1Stats.pointsPerGame) * (1 + team1Advantage * 0.3));
+    const team2ProjScore = Math.round(parseFloat(team2Stats.pointsPerGame) * (1 + team2Advantage * 0.3));
+    
+    // Confidence level
+    const probDiff = Math.abs(team1Prob - team2Prob);
+    let confidence = 'Medium';
+    if (probDiff > 25) confidence = 'High';
+    else if (probDiff < 10) confidence = 'Low';
+    
+    // Key factors
+    const factors = [];
+    if (Math.abs(ppgDiff) > 5) {
+      const higherScoring = ppgDiff > 0 ? team1Code : team2Code;
+      factors.push(`${nbaTeams[higherScoring].name} averaging ${Math.abs(ppgDiff).toFixed(1)} more PPG`);
+    }
+    if (Math.abs(fgDiff) > 3) {
+      const betterShooting = fgDiff > 0 ? team1Code : team2Code;
+      factors.push(`${nbaTeams[betterShooting].name} shooting ${Math.abs(fgDiff).toFixed(1)}% better from the field`);
+    }
+    if (Math.abs(rebDiff) > 5) {
+      const betterRebounding = rebDiff > 0 ? team1Code : team2Code;
+      factors.push(`${nbaTeams[betterRebounding].name} dominating the boards (+${Math.abs(rebDiff).toFixed(1)} RPG)`);
+    }
+    if (Math.abs(astDiff) > 3) {
+      const betterBallMovement = astDiff > 0 ? team1Code : team2Code;
+      factors.push(`${nbaTeams[betterBallMovement].name} superior ball movement (${Math.abs(astDiff).toFixed(1)} more APG)`);
+    }
+    if (isTeam1Home) {
+      factors.push(`${nbaTeams[team1Code].name} playing at home court`);
+    }
+    
+    return {
+      team1: {
+        name: nbaTeams[team1Code].name,
+        code: team1Code,
+        probability: parseFloat(team1Prob.toFixed(1)),
+        predictedScore: team1ProjScore
+      },
+      team2: {
+        name: nbaTeams[team2Code].name,
+        code: team2Code,
+        probability: parseFloat(team2Prob.toFixed(1)),
+        predictedScore: team2ProjScore
+      },
+      confidence: confidence,
+      keyFactors: factors,
+      isTeam1Home: isTeam1Home
+    };
+  } catch (error) {
+    console.error(`❌ NBA prediction error for ${team1Code} vs ${team2Code}:`, error.message);
+    console.error(error.stack);
+    throw error; // Re-throw so the outer catch can handle it
   }
-  if (Math.abs(fgDiff) > 3) {
-    const betterShooting = fgDiff > 0 ? team1Code : team2Code;
-    factors.push(`${nbaTeams[betterShooting].name} shooting ${Math.abs(fgDiff).toFixed(1)}% better from the field`);
-  }
-  if (Math.abs(rebDiff) > 5) {
-    const betterRebounding = rebDiff > 0 ? team1Code : team2Code;
-    factors.push(`${nbaTeams[betterRebounding].name} dominating the boards (+${Math.abs(rebDiff).toFixed(1)} RPG)`);
-  }
-  if (Math.abs(astDiff) > 3) {
-    const betterBallMovement = astDiff > 0 ? team1Code : team2Code;
-    factors.push(`${nbaTeams[betterBallMovement].name} superior ball movement (${Math.abs(astDiff).toFixed(1)} more APG)`);
-  }
-  if (isTeam1Home) {
-    factors.push(`${nbaTeams[team1Code].name} playing at home court`);
-  }
-  
-  return {
-    team1: {
-      name: nbaTeams[team1Code].name,
-      code: team1Code,
-      probability: parseFloat(team1Prob.toFixed(1)),
-      predictedScore: team1ProjScore
-    },
-    team2: {
-      name: nbaTeams[team2Code].name,
-      code: team2Code,
-      probability: parseFloat(team2Prob.toFixed(1)),
-      predictedScore: team2ProjScore
-    },
-    confidence: confidence,
-    keyFactors: factors,
-    isTeam1Home: isTeam1Home
-  };
 }
 
 // Helper function to map ESPN team abbreviations to our codes

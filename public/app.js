@@ -3,6 +3,15 @@ const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:3000/api' 
     : '/api';
 
+// Helper function to get date string in EST timezone
+function getESTDateString(date) {
+    const estDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const year = estDate.getFullYear();
+    const month = String(estDate.getMonth() + 1).padStart(2, '0');
+    const day = String(estDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 // State
 let currentDate = new Date();
 let todaysGames = [];
@@ -282,7 +291,7 @@ async function loadTodaysGames() {
     gamesListDiv.innerHTML = '';
     
     try {
-        const dateStr = currentDate.toISOString().split('T')[0];
+        const dateStr = getESTDateString(currentDate);
         const response = await fetch(`${API_BASE}/games-with-predictions?date=${dateStr}`);
         const data = await response.json();
         

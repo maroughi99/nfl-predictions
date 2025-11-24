@@ -1263,18 +1263,45 @@ async function calculateNBAWinProbability(team1Code, team2Code, isTeam1Home) {
       factors.push(`${nbaTeams[team1Code].name} playing at home court`);
     }
     
+    // Get active players and generate projections
+    let team1Players = [];
+    let team2Players = [];
+    try {
+      const team1PlayersRaw = await getActiveNBAPlayers(team1Code);
+      const team2PlayersRaw = await getActiveNBAPlayers(team2Code);
+      
+      // Generate projections for each player
+      team1Players = team1PlayersRaw.map(player => ({
+        ...player,
+        projected: generateNBAProjection(player, team2Stats, isTeam1Home)
+      }));
+      
+      team2Players = team2PlayersRaw.map(player => ({
+        ...player,
+        projected: generateNBAProjection(player, team1Stats, !isTeam1Home)
+      }));
+    } catch (playerError) {
+      console.warn(`⚠️  Could not fetch players for predictions:`, playerError.message);
+    }
+    
     return {
       team1: {
         name: nbaTeams[team1Code].name,
         code: team1Code,
         probability: parseFloat(team1Prob.toFixed(1)),
-        predictedScore: team1ProjScore
+        predictedScore: team1ProjScore,
+        roster: {
+          topPlayers: team1Players
+        }
       },
       team2: {
         name: nbaTeams[team2Code].name,
         code: team2Code,
         probability: parseFloat(team2Prob.toFixed(1)),
-        predictedScore: team2ProjScore
+        predictedScore: team2ProjScore,
+        roster: {
+          topPlayers: team2Players
+        }
       },
       confidence: confidence,
       keyFactors: factors,

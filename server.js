@@ -1257,12 +1257,7 @@ app.get('/api/teams', (req, res) => {
 
 app.get('/api/games', async (req, res) => {
   const { date } = req.query;
-  // If no date provided, use current date in EST timezone (not UTC)
-  let dateStr = date;
-  if (!dateStr) {
-    const estDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    dateStr = estDate.toISOString().split('T')[0];
-  }
+  const dateStr = date || new Date().toISOString().split('T')[0];
   
   try {
     const games = await fetchNFLGames(dateStr);
@@ -1274,15 +1269,10 @@ app.get('/api/games', async (req, res) => {
 
 app.get('/api/games-with-predictions', async (req, res) => {
   const { date } = req.query;
-  // If no date provided, use current date in EST timezone (not UTC)
-  let dateStr = date;
-  if (!dateStr) {
-    const estDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    dateStr = estDate.toISOString().split('T')[0];
-  }
+  const dateStr = date || new Date().toISOString().split('T')[0];
   
   try {
-    console.log(`📊 Fetching games for ${dateStr} (EST)...`);
+    console.log(`📊 Fetching games for ${dateStr}...`);
     const games = await fetchNFLGames(dateStr);
     console.log(`✓ Found ${games.length} games`);
     

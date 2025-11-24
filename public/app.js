@@ -951,12 +951,23 @@ function createPropCard(prop, isSuggested) {
     const recClass = prop.recommendation === 'OVER' ? 'rec-over' : 
                      prop.recommendation === 'UNDER' ? 'rec-under' : 'rec-pass';
     
+    // Generate player image URL from Sleeper CDN if playerId is available
+    const playerImageUrl = prop.playerId 
+        ? `https://sleepercdn.com/content/nfl/players/${prop.playerId}.jpg`
+        : `https://sleepercdn.com/images/v2/icons/player_default.webp`;
+    
     return `
         <div class="prop-card ${isSuggested ? 'suggested' : ''} ${recClass}">
             <div class="prop-header">
                 <div class="prop-player">
-                    <span class="player-name">${prop.player}</span>
-                    <span class="player-team">${prop.team} ${prop.position}</span>
+                    <img src="${playerImageUrl}" 
+                         alt="${prop.player}" 
+                         class="player-headshot"
+                         onerror="this.src='https://sleepercdn.com/images/v2/icons/player_default.webp'">
+                    <div class="player-info">
+                        <span class="player-name">${prop.player}</span>
+                        <span class="player-team">${prop.team} ${prop.position}</span>
+                    </div>
                 </div>
                 <span class="confidence-badge-small ${prop.confidence.toLowerCase()}">${prop.confidence}</span>
             </div>

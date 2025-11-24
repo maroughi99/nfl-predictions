@@ -1612,6 +1612,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
           const gp = stats.gp || 1;
           
           teamPlayers.push({
+            playerId: playerId,
             name: player.full_name,
             position: player.position,
             passYards: stats.pass_yd || 0,
@@ -1642,6 +1643,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       const bookieLine = Math.round(baseAvg + defenseAdjustment - 0.5); // Sportsbooks shade toward UNDER
       
       props.push({
+        playerId: homeQB.playerId,
         player: homeQB.name,
         team: homeTeam,
         position: 'QB',
@@ -1664,6 +1666,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       const bookieLine = Math.round(baseAvg + defenseAdjustment - 0.5);
       
       props.push({
+        playerId: awayQB.playerId,
         player: awayQB.name,
         team: awayTeam,
         position: 'QB',
@@ -1686,6 +1689,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       const bookieLine = Math.round(baseAvg + gameScriptAdj - 0.5);
       
       props.push({
+        playerId: homeRB.playerId,
         player: homeRB.name,
         team: homeTeam,
         position: 'RB',
@@ -1707,6 +1711,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       const bookieLine = Math.round(baseAvg + gameScriptAdj - 0.5);
       
       props.push({
+        playerId: awayRB.playerId,
         player: awayRB.name,
         team: awayTeam,
         position: 'RB',
@@ -1729,6 +1734,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       const bookieLine = Math.round(baseAvg + coverageAdj - 0.5);
       
       props.push({
+        playerId: homeWR.playerId,
         player: homeWR.name,
         team: homeTeam,
         position: homeWR.position,
@@ -1750,6 +1756,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       const bookieLine = Math.round(baseAvg + coverageAdj - 0.5);
       
       props.push({
+        playerId: awayWR.playerId,
         player: awayWR.name,
         team: awayTeam,
         position: awayWR.position,

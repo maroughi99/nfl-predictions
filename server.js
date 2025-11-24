@@ -1179,8 +1179,12 @@ function mapESPNTeamCode(espnTeam) {
 async function fetchNFLGames(dateStr) {
   try {
     // ESPN Scoreboard API - free and public
-    // Use default (no date param) to get current week, then filter by requested date
-    const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`;
+    // If dateStr provided (YYYY-MM-DD), convert to YYYYMMDD format for ESPN API
+    let url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`;
+    if (dateStr) {
+      const espnDate = dateStr.replace(/-/g, ''); // Convert YYYY-MM-DD to YYYYMMDD
+      url += `?dates=${espnDate}`;
+    }
     
     const response = await axios.get(url, { timeout: 10000 });
     const data = response.data;
@@ -1365,10 +1369,10 @@ app.get('/api/upcoming-games', async (req, res) => {
     for (let i = 0; i < 14; i++) {
       const checkDate = new Date(today);
       checkDate.setDate(today.getDate() + i);
-      const dateStr = checkDate.toISOString().split('T')[0].replace(/-/g, '');
+      const dateStr = checkDate.toISOString().split('T')[0]; // Format: YYYY-MM-DD
       
       try {
-        const dayGames = await fetchNFLGames(dateStr.slice(0, 4) + '-' + dateStr.slice(4, 6) + '-' + dateStr.slice(6, 8));
+        const dayGames = await fetchNFLGames(dateStr);
         allGames.push(...dayGames);
       } catch (err) {
         // Skip days with no games or errors

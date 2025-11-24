@@ -1697,20 +1697,29 @@ app.get('/api/same-game-parlay', async (req, res) => {
     
     // Save prop predictions to database if we have gameId and gameDate
     if (gameId && gameDate) {
+      let savedCount = 0;
       props.forEach(prop => {
-        db.savePropPrediction(
-          gameId,
-          gameDate,
-          prop.player,
-          prop.team,
-          prop.position,
-          prop.prop,
-          prop.line,
-          prop.recommendation,
-          prop.confidence
-        );
+        // Only save if player name exists
+        if (prop.player && prop.player.trim()) {
+          try {
+            db.savePropPrediction(
+              gameId,
+              gameDate,
+              prop.player,
+              prop.team,
+              prop.position,
+              prop.prop,
+              prop.line,
+              prop.recommendation,
+              prop.confidence
+            );
+            savedCount++;
+          } catch (error) {
+            console.error(`Error saving prop prediction for ${prop.player}:`, error.message);
+          }
+        }
       });
-      console.log(`💾 Saved ${props.length} prop predictions for ${awayTeam} @ ${homeTeam}`);
+      console.log(`💾 Saved ${savedCount} prop predictions for ${awayTeam} @ ${homeTeam}`);
     }
     
     res.json({

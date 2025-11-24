@@ -1637,14 +1637,9 @@ app.get('/api/same-game-parlay', async (req, res) => {
     
     const props = [];
     
-    // Home QB - prioritize by games played (starter), then by total yards
-    const homeQB = homePlayers.filter(p => p.position === 'QB' && p.passYards > 0)
-      .sort((a, b) => {
-        // First sort by games played (starters have more games)
-        if (b.gamesPlayed !== a.gamesPlayed) return b.gamesPlayed - a.gamesPlayed;
-        // Then by total yards if games played are equal
-        return b.passYards - a.passYards;
-      })[0];
+    // Home QB - select QB with most games played (actual starter), minimum 150 yds/game to filter out garbage time QBs
+    const homeQB = homePlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
+      .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
     if (homeQB) {
       const baseAvg = homeQB.passYardsPerGame;
       // Adjust line based on opponent's scoring (weak defense = higher line)
@@ -1665,14 +1660,9 @@ app.get('/api/same-game-parlay', async (req, res) => {
       });
     }
     
-    // Away QB - prioritize by games played (starter), then by total yards
-    const awayQB = awayPlayers.filter(p => p.position === 'QB' && p.passYards > 0)
-      .sort((a, b) => {
-        // First sort by games played (starters have more games)
-        if (b.gamesPlayed !== a.gamesPlayed) return b.gamesPlayed - a.gamesPlayed;
-        // Then by total yards if games played are equal
-        return b.passYards - a.passYards;
-      })[0];
+    // Away QB - select QB with most games played (actual starter), minimum 150 yds/game to filter out garbage time QBs
+    const awayQB = awayPlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
+      .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
     if (awayQB) {
       const baseAvg = awayQB.passYardsPerGame;
       // Adjust line based on opponent's defense

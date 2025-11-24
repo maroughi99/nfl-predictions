@@ -1653,12 +1653,31 @@ app.get('/api/same-game-parlay', async (req, res) => {
             playerId: playerId,
             name: player.full_name,
             position: player.position,
+            // Passing
             passYards: stats.pass_yd || 0,
             passYardsPerGame: Math.round((stats.pass_yd || 0) / gp),
+            passTDs: stats.pass_td || 0,
+            passTDsPerGame: ((stats.pass_td || 0) / gp).toFixed(1),
+            completions: stats.pass_cmp || 0,
+            completionsPerGame: Math.round((stats.pass_cmp || 0) / gp),
+            interceptions: stats.pass_int || 0,
+            interceptionsPerGame: ((stats.pass_int || 0) / gp).toFixed(1),
+            // Rushing
             rushYards: stats.rush_yd || 0,
             rushYardsPerGame: Math.round((stats.rush_yd || 0) / gp),
+            rushTDs: stats.rush_td || 0,
+            rushTDsPerGame: ((stats.rush_td || 0) / gp).toFixed(1),
+            rushAttempts: stats.rush_att || 0,
+            rushAttemptsPerGame: Math.round((stats.rush_att || 0) / gp),
+            // Receiving
+            receptions: stats.rec || 0,
+            receptionsPerGame: Math.round((stats.rec || 0) / gp),
             recYards: stats.rec_yd || 0,
             recYardsPerGame: Math.round((stats.rec_yd || 0) / gp),
+            recTDs: stats.rec_td || 0,
+            recTDsPerGame: ((stats.rec_td || 0) / gp).toFixed(1),
+            targets: stats.rec_tgt || 0,
+            targetsPerGame: Math.round((stats.rec_tgt || 0) / gp),
             gamesPlayed: gp
           });
         }
@@ -1708,23 +1727,60 @@ app.get('/api/same-game-parlay', async (req, res) => {
         .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
     }
     if (homeQB && (!activeRoster || activeRoster.has(homeQB.name))) {
-      const baseAvg = homeQB.passYardsPerGame;
-      // Adjust line based on opponent's scoring (weak defense = higher line)
-      const defenseAdjustment = awayStats.pointsPerGame > 28 ? -10 : awayStats.pointsPerGame < 18 ? 10 : 0;
-      const bookieLine = Math.round(baseAvg + defenseAdjustment - 0.5); // Sportsbooks shade toward UNDER
+      const confLevel = homeStats.pointsPerGame > 24 ? 'High' : homeStats.pointsPerGame > 20 ? 'Medium' : 'Low';
       
+      // Passing Yards
+      const passYdsAvg = homeQB.passYardsPerGame;
+      const passYdsAdj = awayStats.pointsPerGame > 28 ? -10 : awayStats.pointsPerGame < 18 ? 10 : 0;
+      const passYdsLine = Math.round(passYdsAvg + passYdsAdj - 0.5);
       props.push({
         playerId: homeQB.playerId,
         player: homeQB.name,
         team: homeTeam,
         position: 'QB',
         prop: 'Passing Yards',
-        line: baseAvg,
-        over: bookieLine,
-        under: bookieLine,
-        recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
-        confidence: homeStats.pointsPerGame > 24 ? 'High' : homeStats.pointsPerGame > 20 ? 'Medium' : 'Low'
+        line: passYdsAvg,
+        over: passYdsLine,
+        under: passYdsLine,
+        recommendation: passYdsAvg > passYdsLine + 5 ? 'OVER' : passYdsAvg < passYdsLine - 5 ? 'UNDER' : 'PASS',
+        confidence: confLevel
       });
+      
+      // Passing TDs
+      if (homeQB.passTDs > 0) {
+        const passTDAvg = parseFloat(homeQB.passTDsPerGame);
+        const passTDLine = (passTDAvg - 0.5).toFixed(1);
+        props.push({
+          playerId: homeQB.playerId,
+          player: homeQB.name,
+          team: homeTeam,
+          position: 'QB',
+          prop: 'Passing TDs',
+          line: passTDAvg,
+          over: passTDLine,
+          under: passTDLine,
+          recommendation: passTDAvg > parseFloat(passTDLine) + 0.3 ? 'OVER' : passTDAvg < parseFloat(passTDLine) - 0.3 ? 'UNDER' : 'PASS',
+          confidence: confLevel
+        });
+      }
+      
+      // Completions
+      if (homeQB.completions > 0) {
+        const compAvg = homeQB.completionsPerGame;
+        const compLine = Math.round(compAvg - 0.5);
+        props.push({
+          playerId: homeQB.playerId,
+          player: homeQB.name,
+          team: homeTeam,
+          position: 'QB',
+          prop: 'Completions',
+          line: compAvg,
+          over: compLine,
+          under: compLine,
+          recommendation: compAvg > compLine + 2 ? 'OVER' : compAvg < compLine - 2 ? 'UNDER' : 'PASS',
+          confidence: confLevel
+        });
+      }
     } else if (homeQB && activeRoster) {
       console.log(`⚠️  ${homeQB.name} not in active roster for ${homeTeam}`);
     }
@@ -1743,124 +1799,271 @@ app.get('/api/same-game-parlay', async (req, res) => {
         .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
     }
     if (awayQB && (!activeRoster || activeRoster.has(awayQB.name))) {
-      const baseAvg = awayQB.passYardsPerGame;
-      // Adjust line based on opponent's defense
-      const defenseAdjustment = homeStats.pointsPerGame > 28 ? -10 : homeStats.pointsPerGame < 18 ? 10 : 0;
-      const bookieLine = Math.round(baseAvg + defenseAdjustment - 0.5);
+      const confLevel = awayStats.pointsPerGame > 24 ? 'High' : awayStats.pointsPerGame > 20 ? 'Medium' : 'Low';
       
+      // Passing Yards
+      const passYdsAvg = awayQB.passYardsPerGame;
+      const passYdsAdj = homeStats.pointsPerGame > 28 ? -10 : homeStats.pointsPerGame < 18 ? 10 : 0;
+      const passYdsLine = Math.round(passYdsAvg + passYdsAdj - 0.5);
       props.push({
         playerId: awayQB.playerId,
         player: awayQB.name,
         team: awayTeam,
         position: 'QB',
         prop: 'Passing Yards',
-        line: baseAvg,
-        over: bookieLine,
-        under: bookieLine,
-        recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
-        confidence: awayStats.pointsPerGame > 24 ? 'High' : awayStats.pointsPerGame > 20 ? 'Medium' : 'Low'
+        line: passYdsAvg,
+        over: passYdsLine,
+        under: passYdsLine,
+        recommendation: passYdsAvg > passYdsLine + 5 ? 'OVER' : passYdsAvg < passYdsLine - 5 ? 'UNDER' : 'PASS',
+        confidence: confLevel
       });
+      
+      // Passing TDs
+      if (awayQB.passTDs > 0) {
+        const passTDAvg = parseFloat(awayQB.passTDsPerGame);
+        const passTDLine = (passTDAvg - 0.5).toFixed(1);
+        props.push({
+          playerId: awayQB.playerId,
+          player: awayQB.name,
+          team: awayTeam,
+          position: 'QB',
+          prop: 'Passing TDs',
+          line: passTDAvg,
+          over: passTDLine,
+          under: passTDLine,
+          recommendation: passTDAvg > parseFloat(passTDLine) + 0.3 ? 'OVER' : passTDAvg < parseFloat(passTDLine) - 0.3 ? 'UNDER' : 'PASS',
+          confidence: confLevel
+        });
+      }
+      
+      // Completions
+      if (awayQB.completions > 0) {
+        const compAvg = awayQB.completionsPerGame;
+        const compLine = Math.round(compAvg - 0.5);
+        props.push({
+          playerId: awayQB.playerId,
+          player: awayQB.name,
+          team: awayTeam,
+          position: 'QB',
+          prop: 'Completions',
+          line: compAvg,
+          over: compLine,
+          under: compLine,
+          recommendation: compAvg > compLine + 2 ? 'OVER' : compAvg < compLine - 2 ? 'UNDER' : 'PASS',
+          confidence: confLevel
+        });
+      }
     }
     
-    // Home RBs (top 2)
+    // Home RBs (all with rushing stats)
     const homeRBs = homePlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
-      .sort((a, b) => b.rushYards - a.rushYards).slice(0, 2);
+      .sort((a, b) => b.rushYards - a.rushYards);
     
     for (const homeRB of homeRBs) {
     if (homeRB && (!activeRoster || activeRoster.has(homeRB.name))) {
-      const baseAvg = homeRB.rushYardsPerGame;
-      // Adjust based on opponent scoring (high scoring = more passing, less rushing)
+      const confLevel = homeRB.rushYardsPerGame > 100 ? 'High' : homeRB.rushYardsPerGame > 60 ? 'Medium' : 'Low';
       const gameScriptAdj = awayStats.pointsPerGame > 26 ? -8 : awayStats.pointsPerGame < 18 ? 8 : 0;
-      const bookieLine = Math.round(baseAvg + gameScriptAdj - 0.5);
       
+      // Rushing Yards
+      const rushYdsAvg = homeRB.rushYardsPerGame;
+      const rushYdsLine = Math.round(rushYdsAvg + gameScriptAdj - 0.5);
       props.push({
         playerId: homeRB.playerId,
         player: homeRB.name,
         team: homeTeam,
         position: 'RB',
         prop: 'Rushing Yards',
-        line: baseAvg,
-        over: bookieLine,
-        under: bookieLine,
-        recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
-        confidence: baseAvg > 100 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
+        line: rushYdsAvg,
+        over: rushYdsLine,
+        under: rushYdsLine,
+        recommendation: rushYdsAvg > rushYdsLine + 5 ? 'OVER' : rushYdsAvg < rushYdsLine - 5 ? 'UNDER' : 'PASS',
+        confidence: confLevel
       });
+      
+      // Receptions (if RB catches passes)
+      if (homeRB.receptions > 0) {
+        const recAvg = homeRB.receptionsPerGame;
+        const recLine = Math.round(recAvg - 0.5);
+        props.push({
+          playerId: homeRB.playerId,
+          player: homeRB.name,
+          team: homeTeam,
+          position: 'RB',
+          prop: 'Receptions',
+          line: recAvg,
+          over: recLine,
+          under: recLine,
+          recommendation: recAvg > recLine + 1 ? 'OVER' : recAvg < recLine - 1 ? 'UNDER' : 'PASS',
+          confidence: recAvg > 5 ? 'Medium' : 'Low'
+        });
+      }
     }
     }
     
-    // Away RBs (top 2)
+    // Away RBs (all with rushing stats)
     const awayRBs = awayPlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
-      .sort((a, b) => b.rushYards - a.rushYards).slice(0, 2);
+      .sort((a, b) => b.rushYards - a.rushYards);
     
     for (const awayRB of awayRBs) {
     if (awayRB && (!activeRoster || activeRoster.has(awayRB.name))) {
-      const baseAvg = awayRB.rushYardsPerGame;
+      const confLevel = awayRB.rushYardsPerGame > 100 ? 'High' : awayRB.rushYardsPerGame > 60 ? 'Medium' : 'Low';
       const gameScriptAdj = homeStats.pointsPerGame > 26 ? -8 : homeStats.pointsPerGame < 18 ? 8 : 0;
-      const bookieLine = Math.round(baseAvg + gameScriptAdj - 0.5);
       
+      // Rushing Yards
+      const rushYdsAvg = awayRB.rushYardsPerGame;
+      const rushYdsLine = Math.round(rushYdsAvg + gameScriptAdj - 0.5);
       props.push({
         playerId: awayRB.playerId,
         player: awayRB.name,
         team: awayTeam,
         position: 'RB',
         prop: 'Rushing Yards',
-        line: baseAvg,
-        over: bookieLine,
-        under: bookieLine,
-        recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
-        confidence: baseAvg > 100 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
+        line: rushYdsAvg,
+        over: rushYdsLine,
+        under: rushYdsLine,
+        recommendation: rushYdsAvg > rushYdsLine + 5 ? 'OVER' : rushYdsAvg < rushYdsLine - 5 ? 'UNDER' : 'PASS',
+        confidence: confLevel
       });
+      
+      // Receptions (if RB catches passes)
+      if (awayRB.receptions > 0) {
+        const recAvg = awayRB.receptionsPerGame;
+        const recLine = Math.round(recAvg - 0.5);
+        props.push({
+          playerId: awayRB.playerId,
+          player: awayRB.name,
+          team: awayTeam,
+          position: 'RB',
+          prop: 'Receptions',
+          line: recAvg,
+          over: recLine,
+          under: recLine,
+          recommendation: recAvg > recLine + 1 ? 'OVER' : recAvg < recLine - 1 ? 'UNDER' : 'PASS',
+          confidence: recAvg > 5 ? 'Medium' : 'Low'
+        });
+      }
     }
     }
     
-    // Home WR/TEs (top 3)
+    // Home WR/TEs (all with receiving stats)
     const homeWRs = homePlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
-      .sort((a, b) => b.recYards - a.recYards).slice(0, 3);
+      .sort((a, b) => b.recYards - a.recYards);
     
     for (const homeWR of homeWRs) {
     if (homeWR && (!activeRoster || activeRoster.has(homeWR.name))) {
-      const baseAvg = homeWR.recYardsPerGame;
-      // Adjust for opponent secondary strength
+      const confLevel = homeWR.recYardsPerGame > 90 ? 'High' : homeWR.recYardsPerGame > 60 ? 'Medium' : 'Low';
       const coverageAdj = awayStats.pointsPerGame > 28 ? -6 : awayStats.pointsPerGame < 18 ? 6 : 0;
-      const bookieLine = Math.round(baseAvg + coverageAdj - 0.5);
       
+      // Receiving Yards
+      const recYdsAvg = homeWR.recYardsPerGame;
+      const recYdsLine = Math.round(recYdsAvg + coverageAdj - 0.5);
       props.push({
         playerId: homeWR.playerId,
         player: homeWR.name,
         team: homeTeam,
         position: homeWR.position,
         prop: 'Receiving Yards',
-        line: baseAvg,
-        over: bookieLine,
-        under: bookieLine,
-        recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
-        confidence: baseAvg > 90 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
+        line: recYdsAvg,
+        over: recYdsLine,
+        under: recYdsLine,
+        recommendation: recYdsAvg > recYdsLine + 5 ? 'OVER' : recYdsAvg < recYdsLine - 5 ? 'UNDER' : 'PASS',
+        confidence: confLevel
       });
+      
+      // Receptions
+      const recAvg = homeWR.receptionsPerGame;
+      const recLine = Math.round(recAvg - 0.5);
+      props.push({
+        playerId: homeWR.playerId,
+        player: homeWR.name,
+        team: homeTeam,
+        position: homeWR.position,
+        prop: 'Receptions',
+        line: recAvg,
+        over: recLine,
+        under: recLine,
+        recommendation: recAvg > recLine + 1 ? 'OVER' : recAvg < recLine - 1 ? 'UNDER' : 'PASS',
+        confidence: recAvg > 7 ? 'High' : recAvg > 4 ? 'Medium' : 'Low'
+      });
+      
+      // Receiving TDs (if player scores)
+      if (homeWR.recTDs > 0) {
+        const recTDAvg = parseFloat(homeWR.recTDsPerGame);
+        const recTDLine = (recTDAvg - 0.5).toFixed(1);
+        props.push({
+          playerId: homeWR.playerId,
+          player: homeWR.name,
+          team: homeTeam,
+          position: homeWR.position,
+          prop: 'Receiving TDs',
+          line: recTDAvg,
+          over: recTDLine,
+          under: recTDLine,
+          recommendation: recTDAvg > parseFloat(recTDLine) + 0.2 ? 'OVER' : recTDAvg < parseFloat(recTDLine) - 0.2 ? 'UNDER' : 'PASS',
+          confidence: recTDAvg > 0.7 ? 'High' : recTDAvg > 0.4 ? 'Medium' : 'Low'
+        });
+      }
     }
     }
     
-    // Away WR/TEs (top 3)
+    // Away WR/TEs (all with receiving stats)
     const awayWRs = awayPlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
-      .sort((a, b) => b.recYards - a.recYards).slice(0, 3);
+      .sort((a, b) => b.recYards - a.recYards);
     
     for (const awayWR of awayWRs) {
     if (awayWR && (!activeRoster || activeRoster.has(awayWR.name))) {
-      const baseAvg = awayWR.recYardsPerGame;
+      const confLevel = awayWR.recYardsPerGame > 90 ? 'High' : awayWR.recYardsPerGame > 60 ? 'Medium' : 'Low';
       const coverageAdj = homeStats.pointsPerGame > 28 ? -6 : homeStats.pointsPerGame < 18 ? 6 : 0;
-      const bookieLine = Math.round(baseAvg + coverageAdj - 0.5);
       
+      // Receiving Yards
+      const recYdsAvg = awayWR.recYardsPerGame;
+      const recYdsLine = Math.round(recYdsAvg + coverageAdj - 0.5);
       props.push({
         playerId: awayWR.playerId,
         player: awayWR.name,
         team: awayTeam,
         position: awayWR.position,
         prop: 'Receiving Yards',
-        line: baseAvg,
-        over: bookieLine,
-        under: bookieLine,
-        recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
-        confidence: baseAvg > 90 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
+        line: recYdsAvg,
+        over: recYdsLine,
+        under: recYdsLine,
+        recommendation: recYdsAvg > recYdsLine + 5 ? 'OVER' : recYdsAvg < recYdsLine - 5 ? 'UNDER' : 'PASS',
+        confidence: confLevel
       });
+      
+      // Receptions
+      const recAvg = awayWR.receptionsPerGame;
+      const recLine = Math.round(recAvg - 0.5);
+      props.push({
+        playerId: awayWR.playerId,
+        player: awayWR.name,
+        team: awayTeam,
+        position: awayWR.position,
+        prop: 'Receptions',
+        line: recAvg,
+        over: recLine,
+        under: recLine,
+        recommendation: recAvg > recLine + 1 ? 'OVER' : recAvg < recLine - 1 ? 'UNDER' : 'PASS',
+        confidence: recAvg > 7 ? 'High' : recAvg > 4 ? 'Medium' : 'Low'
+      });
+      
+      // Receiving TDs (if player scores)
+      if (awayWR.recTDs > 0) {
+        const recTDAvg = parseFloat(awayWR.recTDsPerGame);
+        const recTDLine = (recTDAvg - 0.5).toFixed(1);
+        props.push({
+          playerId: awayWR.playerId,
+          player: awayWR.name,
+          team: awayTeam,
+          position: awayWR.position,
+          prop: 'Receiving TDs',
+          line: recTDAvg,
+          over: recTDLine,
+          under: recTDLine,
+          recommendation: recTDAvg > parseFloat(recTDLine) + 0.2 ? 'OVER' : recTDAvg < parseFloat(recTDLine) - 0.2 ? 'UNDER' : 'PASS',
+          confidence: recTDAvg > 0.7 ? 'High' : recTDAvg > 0.4 ? 'Medium' : 'Low'
+        });
+      }
     }
     }
     

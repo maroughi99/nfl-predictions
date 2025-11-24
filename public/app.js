@@ -68,8 +68,6 @@ function switchSport(sport) {
     // Update header
     const sportName = sport.toUpperCase();
     document.getElementById('sportName').textContent = sportName;
-    document.getElementById('sportSubtitle').textContent = 
-        `Real-time ${sportName} game predictions & analytics`;
     
     // Reload games for new sport
     currentDate = new Date();
@@ -430,7 +428,7 @@ function createGamePredictionCard(game) {
         
         <div class="game-matchup-display">
             <div class="team-display">
-                <img src="https://a.espncdn.com/i/teamlogos/nfl/500/${game.awayTeam.code}.png" 
+                <img src="${game.awayTeam.logo || `https://a.espncdn.com/i/teamlogos/${currentSport}/500/${game.awayTeam.code}.png`}" 
                      alt="${game.awayTeam.name}" 
                      class="team-logo"
                      onerror="this.style.display='none'">
@@ -447,7 +445,7 @@ function createGamePredictionCard(game) {
             <div class="matchup-divider">@</div>
             
             <div class="team-display">
-                <img src="https://a.espncdn.com/i/teamlogos/nfl/500/${game.homeTeam.code}.png" 
+                <img src="${game.homeTeam.logo || `https://a.espncdn.com/i/teamlogos/${currentSport}/500/${game.homeTeam.code}.png`}" 
                      alt="${game.homeTeam.name}" 
                      class="team-logo"
                      onerror="this.style.display='none'">

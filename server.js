@@ -1349,14 +1349,16 @@ async function fetchNFLGames(dateStr) {
           name: nflTeams[homeCode].name,
           abbreviation: homeTeam.team.abbreviation,
           score: homeTeam.score,
-          record: homeTeam.records ? homeTeam.records[0]?.summary : 'N/A'
+          record: homeTeam.records ? homeTeam.records[0]?.summary : 'N/A',
+          logo: homeTeam.team.logo
         },
         awayTeam: {
           code: awayCode,
           name: nflTeams[awayCode].name,
           abbreviation: awayTeam.team.abbreviation,
           score: awayTeam.score,
-          record: awayTeam.records ? awayTeam.records[0]?.summary : 'N/A'
+          record: awayTeam.records ? awayTeam.records[0]?.summary : 'N/A',
+          logo: awayTeam.team.logo
         },
         venue: competition.venue ? competition.venue.fullName : 'TBD',
         broadcast: competition.broadcasts && competition.broadcasts.length > 0 

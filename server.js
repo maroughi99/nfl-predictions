@@ -2067,9 +2067,32 @@ app.get('/api/same-game-parlay', async (req, res) => {
     }
     }
     
-    // Generate suggested parlay
-    const highConfidenceProps = props.filter(p => p.confidence === 'High' && p.recommendation !== 'PASS');
-    const suggestedParlay = highConfidenceProps.length > 0 ? highConfidenceProps.slice(0, 4) : props.filter(p => p.recommendation !== 'PASS').slice(0, 3)
+    // Generate multiple suggested parlays with different strategies
+    const highConfProps = props.filter(p => p.confidence === 'High' && p.recommendation !== 'PASS');
+    const mediumConfProps = props.filter(p => p.confidence === 'Medium' && p.recommendation !== 'PASS');
+    const allGoodProps = props.filter(p => p.recommendation !== 'PASS' && p.confidence !== 'Low');
+    
+    // Strategy 1: Conservative - All High Confidence (4-5 legs)
+    const conservativeParlay = highConfProps.slice(0, 5);
+    const conservativeOdds = conservativeParlay.length > 0 ? `+${Math.round(Math.pow(1.83, conservativeParlay.length) * 100)}` : 'N/A';
+    
+    // Strategy 2: Balanced - Mix of High + Medium (5-6 legs)
+    const balancedParlay = [];
+    const balancedHigh = highConfProps.slice(0, 3);
+    const balancedMedium = mediumConfProps.slice(0, 3);
+    balancedParlay.push(...balancedHigh, ...balancedMedium);
+    const balancedOdds = balancedParlay.length > 0 ? `+${Math.round(Math.pow(1.83, balancedParlay.length) * 100)}` : 'N/A';
+    
+    // Strategy 3: Aggressive - Best value picks across all confidence (7-8 legs)
+    // Sort by how much edge we have over the line
+    const valueProps = allGoodProps.map(p => {
+      const edge = p.recommendation === 'OVER' ? p.line - p.over : p.over - p.line;
+      return { ...p, edge };
+    }).sort((a, b) => b.edge - a.edge).slice(0, 8);
+    const aggressiveOdds = valueProps.length > 0 ? `+${Math.round(Math.pow(1.83, valueProps.length) * 100)}` : 'N/A';
+    
+    // Default to balanced if available, otherwise conservative
+    const suggestedParlay = balancedParlay.length > 0 ? balancedParlay : conservativeParlay
     
     // Save prop predictions to database if we have gameId and gameDate
     if (gameId && gameDate) {
@@ -2101,8 +2124,30 @@ app.get('/api/same-game-parlay', async (req, res) => {
     res.json({
       game: `${awayTeam} @ ${homeTeam}`,
       allProps: props,
+      // Primary suggested parlay (balanced strategy)
       suggestedParlay: suggestedParlay,
-      parlayOdds: suggestedParlay.length > 0 ? `+${Math.round(Math.pow(1.83, suggestedParlay.length) * 100)}` : 'N/A'
+      parlayOdds: suggestedParlay.length > 0 ? `+${Math.round(Math.pow(1.83, suggestedParlay.length) * 100)}` : 'N/A',
+      // Additional parlay strategies
+      parlayStrategies: {
+        conservative: {
+          name: 'Conservative (High Confidence Only)',
+          picks: conservativeParlay,
+          odds: conservativeOdds,
+          description: `${conservativeParlay.length} legs - Lower risk, all high confidence`
+        },
+        balanced: {
+          name: 'Balanced (High + Medium Mix)',
+          picks: balancedParlay,
+          odds: balancedOdds,
+          description: `${balancedParlay.length} legs - Best balance of risk and reward`
+        },
+        aggressive: {
+          name: 'Aggressive (Best Value Picks)',
+          picks: valueProps,
+          odds: aggressiveOdds,
+          description: `${valueProps.length} legs - Higher payout, more risk`
+        }
+      }
     });
     
   } catch (error) {

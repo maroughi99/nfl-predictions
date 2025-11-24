@@ -1276,6 +1276,77 @@ body::before {
     margin-top: 1.5rem;
 }
 
+/* Parlay Strategy Cards */
+.parlay-strategy {
+    margin-bottom: 3rem;
+    padding: 2rem;
+    background: var(--bg-card);
+    border-radius: 16px;
+    border: 2px solid var(--border-color);
+    transition: all 0.3s ease;
+}
+
+.parlay-strategy:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.parlay-strategy.recommended {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    border-color: var(--primary);
+}
+
+.strategy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.strategy-header h3 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.recommended-badge {
+    background: var(--success-gradient);
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-left: 0.5rem;
+}
+
+.strategy-odds {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent-green);
+    padding: 0.5rem 1rem;
+    background: rgba(0, 242, 160, 0.1);
+    border-radius: 8px;
+}
+
+.strategy-description {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+    line-height: 1.5;
+}
+
+.strategy-picks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
 .prop-card {
     background: var(--surface);
     border: 2px solid var(--border-color);

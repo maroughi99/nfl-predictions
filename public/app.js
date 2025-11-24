@@ -948,11 +948,61 @@ async function generateParlay() {
         const response = await fetch(`${API_BASE}/same-game-parlay?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}`);
         const data = await response.json();
         
-        // Display suggested parlay
-        document.getElementById('parlayOdds').textContent = data.parlayOdds;
-        
+        // Display suggested parlays - show all three strategies
         const suggestedList = document.getElementById('suggestedParlayList');
-        suggestedList.innerHTML = data.suggestedParlay.map(prop => createPropCard(prop, true)).join('');
+        
+        let strategiesHTML = '';
+        if (data.parlayStrategies) {
+            // Conservative Strategy
+            if (data.parlayStrategies.conservative.picks.length > 0) {
+                strategiesHTML += `
+                    <div class="parlay-strategy">
+                        <div class="strategy-header">
+                            <h3>🛡️ ${data.parlayStrategies.conservative.name}</h3>
+                            <span class="strategy-odds">${data.parlayStrategies.conservative.odds}</span>
+                        </div>
+                        <p class="strategy-description">${data.parlayStrategies.conservative.description}</p>
+                        <div class="strategy-picks">
+                            ${data.parlayStrategies.conservative.picks.map(prop => createPropCard(prop, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Balanced Strategy
+            if (data.parlayStrategies.balanced.picks.length > 0) {
+                strategiesHTML += `
+                    <div class="parlay-strategy recommended">
+                        <div class="strategy-header">
+                            <h3>⚖️ ${data.parlayStrategies.balanced.name} <span class="recommended-badge">RECOMMENDED</span></h3>
+                            <span class="strategy-odds">${data.parlayStrategies.balanced.odds}</span>
+                        </div>
+                        <p class="strategy-description">${data.parlayStrategies.balanced.description}</p>
+                        <div class="strategy-picks">
+                            ${data.parlayStrategies.balanced.picks.map(prop => createPropCard(prop, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Aggressive Strategy
+            if (data.parlayStrategies.aggressive.picks.length > 0) {
+                strategiesHTML += `
+                    <div class="parlay-strategy">
+                        <div class="strategy-header">
+                            <h3>🔥 ${data.parlayStrategies.aggressive.name}</h3>
+                            <span class="strategy-odds">${data.parlayStrategies.aggressive.odds}</span>
+                        </div>
+                        <p class="strategy-description">${data.parlayStrategies.aggressive.description}</p>
+                        <div class="strategy-picks">
+                            ${data.parlayStrategies.aggressive.picks.map(prop => createPropCard(prop, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        suggestedList.innerHTML = strategiesHTML;
         
         // Display all props
         const allPropsList = document.getElementById('allPropsList');

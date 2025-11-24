@@ -1637,9 +1637,14 @@ app.get('/api/same-game-parlay', async (req, res) => {
     
     const props = [];
     
-    // Home QB
+    // Home QB - prioritize by games played (starter), then by total yards
     const homeQB = homePlayers.filter(p => p.position === 'QB' && p.passYards > 0)
-      .sort((a, b) => b.passYards - a.passYards)[0];
+      .sort((a, b) => {
+        // First sort by games played (starters have more games)
+        if (b.gamesPlayed !== a.gamesPlayed) return b.gamesPlayed - a.gamesPlayed;
+        // Then by total yards if games played are equal
+        return b.passYards - a.passYards;
+      })[0];
     if (homeQB) {
       const baseAvg = homeQB.passYardsPerGame;
       // Adjust line based on opponent's scoring (weak defense = higher line)
@@ -1660,9 +1665,14 @@ app.get('/api/same-game-parlay', async (req, res) => {
       });
     }
     
-    // Away QB
+    // Away QB - prioritize by games played (starter), then by total yards
     const awayQB = awayPlayers.filter(p => p.position === 'QB' && p.passYards > 0)
-      .sort((a, b) => b.passYards - a.passYards)[0];
+      .sort((a, b) => {
+        // First sort by games played (starters have more games)
+        if (b.gamesPlayed !== a.gamesPlayed) return b.gamesPlayed - a.gamesPlayed;
+        // Then by total yards if games played are equal
+        return b.passYards - a.passYards;
+      })[0];
     if (awayQB) {
       const baseAvg = awayQB.passYardsPerGame;
       // Adjust line based on opponent's defense

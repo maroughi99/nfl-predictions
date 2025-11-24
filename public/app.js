@@ -1,5 +1,7 @@
-// API Base URL
-const API_BASE = 'http://localhost:3000/api';
+// API Base URL - use relative path so it works both locally and on Vercel
+const API_BASE = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000/api' 
+    : '/api';
 
 // State
 let currentDate = new Date();

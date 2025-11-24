@@ -1899,4 +1899,116 @@ body::before {
         grid-template-columns: 1fr;
         gap: 1rem;
     }
+
+    /* Game Card Mobile Optimizations */
+    .game-card {
+        padding: 1rem;
+        border-radius: 12px;
+    }
+
+    .game-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+    }
+
+    .game-status {
+        font-size: 0.8rem;
+    }
+
+    .game-matchup-display {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+
+    .matchup-divider {
+        display: none;
+    }
+
+    .team-display {
+        gap: 0.5rem;
+        padding: 1rem;
+        background: var(--bg-secondary);
+        border-radius: 8px;
+    }
+
+    .team-display-header {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .team-display-name {
+        font-size: 1.1rem;
+    }
+
+    .team-display-record {
+        font-size: 0.85rem;
+    }
+
+    .team-display-prob {
+        font-size: 1.8rem;
+        font-weight: 900;
+    }
+
+    .winner-badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.6rem;
+    }
+
+    .game-details-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .game-detail-item {
+        padding: 0.7rem;
+    }
+
+    .detail-label {
+        font-size: 0.7rem;
+    }
+
+    .detail-value {
+        font-size: 0.9rem;
+    }
+
+    /* Parlay Mobile Optimizations */
+    .parlay-selector {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1rem;
+        align-items: stretch;
+    }
+
+    .parlay-selector label {
+        font-size: 0.9rem;
+    }
+
+    .game-select {
+        width: 100%;
+        font-size: 0.9rem;
+        padding: 0.65rem 0.85rem;
+    }
+
+    .generate-btn {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        font-size: 0.95rem;
+    }
+
+    .parlay-card {
+        padding: 1rem;
+    }
+
+    .prop-item {
+        padding: 0.75rem;
+        font-size: 0.9rem;
+    }
+
+    .prediction-grid {
+        gap: 1rem;
+    }
 }

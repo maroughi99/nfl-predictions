@@ -392,23 +392,35 @@ function createGamePredictionCard(game) {
         
         <div class="game-matchup-display">
             <div class="team-display">
-                <div class="team-display-header">
-                    <span class="team-display-name">${game.awayTeam.name}</span>
-                    ${!homeWinning ? '<span class="winner-badge">FAVORITE</span>' : ''}
+                <img src="https://a.espncdn.com/i/teamlogos/nfl/500/${game.awayTeam.code}.png" 
+                     alt="${game.awayTeam.name}" 
+                     class="team-logo"
+                     onerror="this.style.display='none'">
+                <div class="team-info">
+                    <div class="team-display-header">
+                        <span class="team-display-name">${game.awayTeam.name}</span>
+                        ${!homeWinning ? '<span class="winner-badge">FAVORITE</span>' : ''}
+                    </div>
+                    <div class="team-display-record">Record: ${game.awayTeam.record}</div>
+                    <div class="team-display-prob">${awayProb.toFixed(1)}%</div>
                 </div>
-                <div class="team-display-record">Record: ${game.awayTeam.record}</div>
-                <div class="team-display-prob">${awayProb.toFixed(1)}%</div>
             </div>
             
             <div class="matchup-divider">@</div>
             
             <div class="team-display">
-                <div class="team-display-header">
-                    <span class="team-display-name">${game.homeTeam.name}</span>
-                    ${homeWinning ? '<span class="winner-badge">FAVORITE</span>' : ''}
+                <img src="https://a.espncdn.com/i/teamlogos/nfl/500/${game.homeTeam.code}.png" 
+                     alt="${game.homeTeam.name}" 
+                     class="team-logo"
+                     onerror="this.style.display='none'">
+                <div class="team-info">
+                    <div class="team-display-header">
+                        <span class="team-display-name">${game.homeTeam.name}</span>
+                        ${homeWinning ? '<span class="winner-badge">FAVORITE</span>' : ''}
+                    </div>
+                    <div class="team-display-record">Record: ${game.homeTeam.record}</div>
+                    <div class="team-display-prob">${homeProb.toFixed(1)}%</div>
                 </div>
-                <div class="team-display-record">Record: ${game.homeTeam.record}</div>
-                <div class="team-display-prob">${homeProb.toFixed(1)}%</div>
             </div>
         </div>
         

@@ -1590,6 +1590,36 @@ app.get('/api/history', (req, res) => {
   }
 });
 
+// Fetch active roster for a specific game from ESPN
+async function getActiveRosterForGame(gameId) {
+  try {
+    if (!gameId) return null;
+    
+    const response = await axios.get(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${gameId}`, { timeout: 5000 });
+    const boxscore = response.data?.boxscore;
+    
+    if (!boxscore || !boxscore.players) return null;
+    
+    const activePlayers = new Set();
+    
+    // Extract all players who have stats in the boxscore (they're playing)
+    for (const team of boxscore.players) {
+      for (const position of team.statistics || []) {
+        for (const athlete of position.athletes || []) {
+          if (athlete.athlete?.displayName) {
+            activePlayers.add(athlete.athlete.displayName);
+          }
+        }
+      }
+    }
+    
+    return activePlayers;
+  } catch (error) {
+    console.warn('Could not fetch active roster from ESPN:', error.message);
+    return null; // Return null if API fails, don't block parlay generation
+  }
+}
+
 // Same-Game Parlay Generator
 app.get('/api/same-game-parlay', async (req, res) => {
   try {
@@ -1598,6 +1628,9 @@ app.get('/api/same-game-parlay', async (req, res) => {
     if (!homeTeam || !awayTeam) {
       return res.status(400).json({ error: 'homeTeam and awayTeam parameters required' });
     }
+    
+    // Try to get active roster for tonight's game
+    const activeRoster = await getActiveRosterForGame(gameId);
     
     // Get player data directly from Sleeper
     const players = await getSleeperPlayers();
@@ -1655,7 +1688,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       homeQB = homePlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
         .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
     }
-    if (homeQB) {
+    if (homeQB && (!activeRoster || activeRoster.has(homeQB.name))) {
       const baseAvg = homeQB.passYardsPerGame;
       // Adjust line based on opponent's scoring (weak defense = higher line)
       const defenseAdjustment = awayStats.pointsPerGame > 28 ? -10 : awayStats.pointsPerGame < 18 ? 10 : 0;
@@ -1673,6 +1706,8 @@ app.get('/api/same-game-parlay', async (req, res) => {
         recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
         confidence: homeStats.pointsPerGame > 24 ? 'High' : homeStats.pointsPerGame > 20 ? 'Medium' : 'Low'
       });
+    } else if (homeQB && activeRoster) {
+      console.log(`⚠️  ${homeQB.name} not in active roster for ${homeTeam}`);
     }
     
     // Away QB - prioritize known starter, otherwise select QB with most games played
@@ -1684,7 +1719,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
       awayQB = awayPlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
         .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
     }
-    if (awayQB) {
+    if (awayQB && (!activeRoster || activeRoster.has(awayQB.name))) {
       const baseAvg = awayQB.passYardsPerGame;
       // Adjust line based on opponent's defense
       const defenseAdjustment = homeStats.pointsPerGame > 28 ? -10 : homeStats.pointsPerGame < 18 ? 10 : 0;
@@ -1707,7 +1742,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
     // Home RB
     const homeRB = homePlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
       .sort((a, b) => b.rushYards - a.rushYards)[0];
-    if (homeRB) {
+    if (homeRB && (!activeRoster || activeRoster.has(homeRB.name))) {
       const baseAvg = homeRB.rushYardsPerGame;
       // Adjust based on opponent scoring (high scoring = more passing, less rushing)
       const gameScriptAdj = awayStats.pointsPerGame > 26 ? -8 : awayStats.pointsPerGame < 18 ? 8 : 0;
@@ -1730,7 +1765,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
     // Away RB
     const awayRB = awayPlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
       .sort((a, b) => b.rushYards - a.rushYards)[0];
-    if (awayRB) {
+    if (awayRB && (!activeRoster || activeRoster.has(awayRB.name))) {
       const baseAvg = awayRB.rushYardsPerGame;
       const gameScriptAdj = homeStats.pointsPerGame > 26 ? -8 : homeStats.pointsPerGame < 18 ? 8 : 0;
       const bookieLine = Math.round(baseAvg + gameScriptAdj - 0.5);
@@ -1752,7 +1787,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
     // Home WR/TE
     const homeWR = homePlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
       .sort((a, b) => b.recYards - a.recYards)[0];
-    if (homeWR) {
+    if (homeWR && (!activeRoster || activeRoster.has(homeWR.name))) {
       const baseAvg = homeWR.recYardsPerGame;
       // Adjust for opponent secondary strength
       const coverageAdj = awayStats.pointsPerGame > 28 ? -6 : awayStats.pointsPerGame < 18 ? 6 : 0;
@@ -1775,7 +1810,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
     // Away WR/TE
     const awayWR = awayPlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
       .sort((a, b) => b.recYards - a.recYards)[0];
-    if (awayWR) {
+    if (awayWR && (!activeRoster || activeRoster.has(awayWR.name))) {
       const baseAvg = awayWR.recYardsPerGame;
       const coverageAdj = homeStats.pointsPerGame > 28 ? -6 : homeStats.pointsPerGame < 18 ? 6 : 0;
       const bookieLine = Math.round(baseAvg + coverageAdj - 0.5);

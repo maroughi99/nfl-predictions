@@ -1355,20 +1355,50 @@ app.get('/api/predict', async (req, res) => {
 });
 
 app.get('/api/upcoming-games', async (req, res) => {
-  // Fetch REAL upcoming games from ESPN API (no simulated matchups)
-  const today = new Date();
-  const dateStr = today.toISOString().split('T')[0];
+  // Fetch REAL upcoming games from ESPN API for next 14 days
   
   try {
-    const realGames = await fetchNFLGames(dateStr);
+    const allGames = [];
+    const today = new Date();
     
-    // Add predictions to each real game
-    const gamesWithPredictions = await Promise.all(realGames.map(async (game, i) => {
+    // Fetch games for next 14 days (covers next 2 weeks)
+    for (let i = 0; i < 14; i++) {
+      const checkDate = new Date(today);
+      checkDate.setDate(today.getDate() + i);
+      const dateStr = checkDate.toISOString().split('T')[0].replace(/-/g, '');
+      
+      try {
+        const dayGames = await fetchNFLGames(dateStr.slice(0, 4) + '-' + dateStr.slice(4, 6) + '-' + dateStr.slice(6, 8));
+        allGames.push(...dayGames);
+      } catch (err) {
+        // Skip days with no games or errors
+        continue;
+      }
+    }
+    
+    // Filter to only include games that are pre-game or in-progress (not completed)
+    const availableGames = allGames.filter(game => 
+      game.status.state === 'pre' || game.status.state === 'in'
+    );
+    
+    // Add predictions to each available game
+    const gamesWithPredictions = await Promise.all(availableGames.map(async (game, i) => {
+      // Get the game date in EST format
+      const gameDate = new Date(game.date);
+      const estString = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(gameDate);
+      const parts = estString.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      const gameDateStr = parts ? `${parts[3]}-${parts[1]}-${parts[2]}` : game.date.split('T')[0];
+      
       const prediction = await calculateWinProbability(
         game.awayTeam.code, 
         game.homeTeam.code, 
         false, // away team perspective
-        dateStr
+        gameDateStr
       );
       
       return {
@@ -1377,7 +1407,7 @@ app.get('/api/upcoming-games', async (req, res) => {
         team2: game.homeTeam.code,
         homeTeam: game.homeTeam.code,
         gameTime: game.date,
-        gameDate: dateStr,
+        gameDate: gameDateStr,
         venue: game.venue,
         broadcast: game.broadcast,
         status: game.status,

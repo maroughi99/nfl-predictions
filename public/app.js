@@ -228,22 +228,32 @@ async function updatePropResults() {
     btn.innerHTML = '<span class="spinner"></span> Updating...';
     
     try {
+        // Set a longer timeout for this operation (60 seconds)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000);
+        
         const response = await fetch(`${API_BASE}/update-all-prop-results`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal
         });
         
+        clearTimeout(timeoutId);
         const data = await response.json();
         
         if (data.success) {
             alert(`✅ Updated ${data.updated} player prop results`);
             await loadPropAccuracy();
         } else {
-            alert('❌ Failed to update prop results');
+            alert('❌ Failed to update prop results: ' + (data.message || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error updating prop results:', error);
-        alert('❌ Error updating prop results');
+        if (error.name === 'AbortError') {
+            alert('❌ Request timeout: This feature requires loading player stats which can take 15-20 seconds. On Vercel free tier (10 sec limit), this may not work reliably. Try again or run locally.');
+        } else {
+            alert('❌ Error updating prop results: ' + error.message);
+        }
     } finally {
         btn.disabled = false;
         btn.innerHTML = `

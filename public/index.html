@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFL Prediction Analyzer - AI-Powered Game Predictions</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect width="40" height="40" rx="8" fill="url(#gradient)"/>
+                        <path d="M20 8L28 15L20 22L12 15L20 8Z" fill="white"/>
+                        <path d="M20 18L28 25L20 32L12 25L20 18Z" fill="white" opacity="0.7"/>
+                        <defs>
+                            <linearGradient id="gradient" x1="0" y1="0" x2="40" y2="40">
+                                <stop offset="0%" stop-color="#667eea"/>
+                                <stop offset="100%" stop-color="#764ba2"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                    <h1>NFL Prediction Analyzer</h1>
+                </div>
+                <div class="header-subtitle">
+                    <span class="ai-badge">AI POWERED</span>
+                    <span>Real-time NFL game predictions & analytics</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Tab Navigation -->
+            <div class="tab-navigation">
+                <button class="tab-btn active" data-tab="predictions">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                    </svg>
+                    Live Predictions
+                </button>
+                <button class="tab-btn" data-tab="parlay">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7"/>
+                        <rect x="14" y="3" width="7" height="7"/>
+                        <rect x="14" y="14" width="7" height="7"/>
+                        <rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                    Same Game Parlay
+                </button>
+                <button class="tab-btn" data-tab="history">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    History & Accuracy
+                </button>
+            </div>
+
+            <!-- Predictions Tab -->
+            <div id="predictionsTab" class="tab-content active">
+            <!-- Live Games Status -->
+            <section class="live-status-section card">
+                <div class="status-header">
+                    <h2 class="section-title">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        <span id="gamesTitle">Loading NFL Games...</span>
+                    </h2>
+                    <button id="refreshBtn" class="refresh-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/>
+                            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                        </svg>
+                        Refresh Games
+                    </button>
+                </div>
+                
+                <div class="date-selector">
+                    <button class="date-nav-btn" id="prevDay">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15 18 9 12 15 6"/>
+                        </svg>
+                    </button>
+                    <div class="current-date">
+                        <span id="displayDate">Loading...</span>
+                    </div>
+                    <button class="date-nav-btn" id="nextDay">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="games-status" id="gamesStatus">
+                    <div class="loading-spinner">Loading games...</div>
+                </div>
+            </section>
+
+            <!-- Today's Games Predictions -->
+            <section id="todaysGamesSection" class="todays-games-section">
+                <h2 class="section-title">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                    AI Predictions & Analysis
+                </h2>
+                <div id="todaysGamesList" class="todays-games-list">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+            
+            <!-- Detailed Prediction Results (shown when clicking a game) -->
+            <section id="resultsSection" class="results-section" style="display: none;">
+                <div class="results-grid">
+                    <!-- Probability Cards -->
+                    <div class="probability-container card">
+                        <h3 class="card-title">Win Probability</h3>
+                        <div class="probability-display">
+                            <div class="team-probability team1-prob">
+                                <div class="team-info">
+                                    <span class="team-name" id="team1Name">Team 1</span>
+                                    <span class="home-badge">HOME</span>
+                                </div>
+                                <div class="probability-value" id="team1Prob">0%</div>
+                                <div class="probability-bar">
+                                    <div class="probability-fill team1-fill" id="team1Bar"></div>
+                                </div>
+                            </div>
+                            
+                            <div class="vs-separator">
+                                <div class="confidence-badge" id="confidenceBadge">Medium Confidence</div>
+                            </div>
+                            
+                            <div class="team-probability team2-prob">
+                                <div class="team-info">
+                                    <span class="team-name" id="team2Name">Team 2</span>
+                                    <span class="away-badge">AWAY</span>
+                                </div>
+                                <div class="probability-value" id="team2Prob">0%</div>
+                                <div class="probability-bar">
+                                    <div class="probability-fill team2-fill" id="team2Bar"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="predicted-score">
+                            <h4>Predicted Final Score</h4>
+                            <div class="score-display">
+                                <span class="score team1-score" id="team1Score">0</span>
+                                <span class="score-divider">-</span>
+                                <span class="score team2-score" id="team2Score">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Key Factors -->
+                    <div class="factors-card card">
+                        <h3 class="card-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 12l2 2 4-4"/>
+                                <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                            Key Analysis Factors
+                        </h3>
+                        
+                        <!-- Weather Conditions -->
+                        <div class="weather-info" id="weatherInfo">
+                            <!-- Populated by JS -->
+                        </div>
+                        
+                        <!-- Injury Report -->
+                        <div class="injury-report" id="injuryReport">
+                            <!-- Populated by JS -->
+                        </div>
+                        
+                        <ul class="factors-list" id="factorsList">
+                            <!-- Populated by JS -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Player Predictions -->
+                <div class="player-predictions card">
+                    <h3 class="card-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                        Player Predictions
+                    </h3>
+                    
+                    <div class="player-tabs">
+                        <button class="player-tab active" data-position="QB">Quarterbacks</button>
+                        <button class="player-tab" data-position="RB">Running Backs</button>
+                        <button class="player-tab" data-position="WR">Wide Receivers</button>
+                        <button class="player-tab" data-position="TE">Tight Ends</button>
+                        <button class="player-tab" data-position="DEF">Defense</button>
+                    </div>
+                    
+                    <div id="playerStatsContent" class="player-stats-content">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                
+                <!-- Team Statistics Comparison -->
+                <div class="stats-comparison card">
+                    <h3 class="card-title">Team Statistics Comparison</h3>
+                    <div class="stats-grid">
+                        <div class="stat-row">
+                            <div class="stat-label">Record (W-L)</div>
+                            <div class="stat-value team1-stat" id="team1Record">0-0</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="recordBar1"></div>
+                                <div class="stat-bar team2-bar" id="recordBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2Record">0-0</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">Points Per Game</div>
+                            <div class="stat-value team1-stat" id="team1PPG">0.0</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="ppgBar1"></div>
+                                <div class="stat-bar team2-bar" id="ppgBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2PPG">0.0</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">Points Allowed/Game</div>
+                            <div class="stat-value team1-stat" id="team1PAG">0.0</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="pagBar1"></div>
+                                <div class="stat-bar team2-bar" id="pagBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2PAG">0.0</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">Offensive Rating</div>
+                            <div class="stat-value team1-stat" id="team1OR">0</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="orBar1"></div>
+                                <div class="stat-bar team2-bar" id="orBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2OR">0</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">Defensive Rating</div>
+                            <div class="stat-value team1-stat" id="team1DR">0</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="drBar1"></div>
+                                <div class="stat-bar team2-bar" id="drBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2DR">0</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">Last 5 Games</div>
+                            <div class="stat-value team1-stat" id="team1L5">0-0</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="l5Bar1"></div>
+                                <div class="stat-bar team2-bar" id="l5Bar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2L5">0-0</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">QB Health</div>
+                            <div class="stat-value team1-stat" id="team1QB">100%</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="qbBar1"></div>
+                                <div class="stat-bar team2-bar" id="qbBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2QB">100%</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">Key Injuries</div>
+                            <div class="stat-value team1-stat" id="team1Injuries">0</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team2-bar" id="injBar1"></div>
+                                <div class="stat-bar team1-bar" id="injBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2Injuries">0</div>
+                        </div>
+                        
+                        <div class="stat-row">
+                            <div class="stat-label">Days Since Last Game</div>
+                            <div class="stat-value team1-stat" id="team1Rest">7</div>
+                            <div class="stat-bar-container">
+                                <div class="stat-bar team1-bar" id="restBar1"></div>
+                                <div class="stat-bar team2-bar" id="restBar2"></div>
+                            </div>
+                            <div class="stat-value team2-stat" id="team2Rest">7</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            </div>
+
+            <!-- History Tab -->
+            <div id="historyTab" class="tab-content" style="display: none;">
+                <!-- Accuracy Summary -->
+                <section class="accuracy-summary card">
+                    <h2 class="section-title">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                        </svg>
+                        Overall Accuracy
+                    </h2>
+                    <div id="accuracyStats" class="accuracy-grid">
+                        <div class="accuracy-card">
+                            <div class="accuracy-label">Total Predictions</div>
+                            <div class="accuracy-value" id="totalPredictions">0</div>
+                        </div>
+                        <div class="accuracy-card">
+                            <div class="accuracy-label">Completed Games</div>
+                            <div class="accuracy-value" id="totalCompleted">0</div>
+                        </div>
+                        <div class="accuracy-card highlight">
+                            <div class="accuracy-label">Winner Accuracy</div>
+                            <div class="accuracy-value" id="winnerAccuracy">0%</div>
+                        </div>
+                        <div class="accuracy-card">
+                            <div class="accuracy-label">Avg Score Diff</div>
+                            <div class="accuracy-value" id="avgScoreDiff">0.0</div>
+                        </div>
+                    </div>
+                    
+                    <h3 class="subsection-title">Confidence Level Performance</h3>
+                    <div class="confidence-breakdown">
+                        <div class="confidence-stat">
+                            <div class="conf-header">
+                                <span class="conf-label high">High Confidence</span>
+                                <span class="conf-accuracy" id="highAccuracy">0%</span>
+                            </div>
+                            <div class="conf-detail" id="highDetail">0/0 correct</div>
+                        </div>
+                        <div class="confidence-stat">
+                            <div class="conf-header">
+                                <span class="conf-label medium">Medium Confidence</span>
+                                <span class="conf-accuracy" id="mediumAccuracy">0%</span>
+                            </div>
+                            <div class="conf-detail" id="mediumDetail">0/0 correct</div>
+                        </div>
+                        <div class="confidence-stat">
+                            <div class="conf-header">
+                                <span class="conf-label low">Low Confidence</span>
+                                <span class="conf-accuracy" id="lowAccuracy">0%</span>
+                            </div>
+                            <div class="conf-detail" id="lowDetail">0/0 correct</div>
+                        </div>
+                    </div>
+                    
+                    <button id="updateResultsBtn" class="update-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                        </svg>
+                        Update Results from ESPN
+                    </button>
+                </section>
+
+                <!-- Prediction History -->
+                <section class="history-section card">
+                    <h2 class="section-title">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                            <polyline points="9 22 9 12 15 12 15 22"/>
+                        </svg>
+                        Recent Predictions
+                    </h2>
+                    <div id="historyList" class="history-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </section>
+            </div>
+
+            <!-- Same Game Parlay Tab -->
+            <div id="parlayTab" class="tab-content" style="display: none;">
+                <section class="parlay-section card">
+                    <h2 class="section-title">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7"/>
+                            <rect x="14" y="3" width="7" height="7"/>
+                            <rect x="14" y="14" width="7" height="7"/>
+                            <rect x="3" y="14" width="7" height="7"/>
+                        </svg>
+                        Same Game Parlay Generator
+                    </h2>
+                    <p class="section-description">Select a game to generate player prop predictions and suggested parlays</p>
+                    
+                    <div class="parlay-selector">
+                        <label for="parlayGameSelect">Select Game:</label>
+                        <select id="parlayGameSelect" class="game-select">
+                            <option value="">-- Select a game --</option>
+                        </select>
+                        <button id="generateParlayBtn" class="generate-btn" disabled>Generate Parlay</button>
+                    </div>
+                    
+                    <div id="parlayLoading" class="loading-spinner" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Analyzing player stats...</p>
+                    </div>
+                    
+                    <div id="parlayResults" style="display: none;">
+                        <!-- Suggested Parlay -->
+                        <div class="suggested-parlay">
+                            <h3 class="subsection-title">
+                                🎯 Suggested Parlay
+                                <span id="parlayOdds" class="parlay-odds"></span>
+                            </h3>
+                            <div id="suggestedParlayList" class="parlay-picks">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        
+                        <!-- All Props -->
+                        <div class="all-props">
+                            <h3 class="subsection-title">All Player Props</h3>
+                            <div id="allPropsList" class="props-grid">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>NFL Prediction Analyzer © 2025 | AI-Powered Analytics</p>
+            <p class="disclaimer">Predictions are for entertainment purposes only. Past performance does not guarantee future results.</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

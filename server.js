@@ -1951,15 +1951,29 @@ app.get('/', (req, res) => {
 // Initialize database and start server
 async function startServer() {
   try {
-    await db.initDatabase();
+    // Initialize database (PostgreSQL on Vercel, SQLite locally)
+    if (process.env.POSTGRES_URL) {
+      console.log('🗄️  Using PostgreSQL database');
+      await db.initDatabase().catch(err => {
+        console.warn('⚠️  Database init delayed, will retry on first request');
+      });
+    } else {
+      console.log('🗄️  Using SQLite database');
+      db.initDatabase();
+    }
     
     app.listen(PORT, () => {
-      console.log(`NFL Prediction Server running on http://localhost:${PORT}`);
-      scheduleAutoPredictions();
+      console.log(`🚀 NFL Prediction Server running on http://localhost:${PORT}`);
+      if (!process.env.VERCEL) {
+        scheduleAutoPredictions();
+      }
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+    console.error('❌ Failed to start server:', error);
+    // On Vercel, don't exit - let serverless handle it
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
   }
 }
 

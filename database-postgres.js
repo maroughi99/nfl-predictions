@@ -1,8 +1,17 @@
 const { sql } = require('@vercel/postgres');
 
+let tablesInitialized = false;
+
 // Initialize PostgreSQL database with tables
 async function initDatabase() {
+  if (tablesInitialized) {
+    console.log('✅ PostgreSQL tables already initialized');
+    return;
+  }
+
   try {
+    console.log('📊 Initializing PostgreSQL tables...');
+    
     // Predictions table
     await sql`
       CREATE TABLE IF NOT EXISTS predictions (
@@ -89,10 +98,12 @@ async function initDatabase() {
       )
     `;
 
-    console.log('✅ PostgreSQL Database initialized');
+    tablesInitialized = true;
+    console.log('✅ PostgreSQL Database initialized successfully');
   } catch (error) {
-    console.error('Error initializing database:', error);
-    throw error;
+    console.error('❌ Error initializing database:', error.message);
+    // Don't throw - allow app to continue, tables will be created on demand
+    tablesInitialized = false;
   }
 }
 

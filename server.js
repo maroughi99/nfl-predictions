@@ -1262,53 +1262,18 @@ async function calculateNBAWinProbability(team1Code, team2Code, isTeam1Home) {
     factors.push(`${nbaTeams[team1Code].name} playing at home court`);
   }
   
-  // Get active players for each team (filters out injured and inactive players)
-  const team1Players = await getActiveNBAPlayers(team1Code);
-  const team2Players = await getActiveNBAPlayers(team2Code);
-  
-  // Generate projected stats for each player
-  const { generateNBAProjection } = require('./nba-stats');
-  const team1PlayersWithProjections = team1Players.map(player => ({
-    ...player,
-    projected: generateNBAProjection(player, team2Stats, isTeam1Home)
-  }));
-  const team2PlayersWithProjections = team2Players.map(player => ({
-    ...player,
-    projected: generateNBAProjection(player, team1Stats, !isTeam1Home)
-  }));
-  
-  // Get injury information
-  const injuries = await getNBAInjuries();
-  const allPlayerStats = await getNBAPlayerStats();
-  
-  // Count injured players for each team
-  const team1Injured = Object.keys(allPlayerStats)
-    .filter(key => key.endsWith(`|${team1Code}`) && injuries.has(key))
-    .map(key => allPlayerStats[key].name);
-  const team2Injured = Object.keys(allPlayerStats)
-    .filter(key => key.endsWith(`|${team2Code}`) && injuries.has(key))
-    .map(key => allPlayerStats[key].name);
-  
   return {
     team1: {
       name: nbaTeams[team1Code].name,
       code: team1Code,
       probability: parseFloat(team1Prob.toFixed(1)),
-      predictedScore: team1ProjScore,
-      roster: {
-        topPlayers: team1PlayersWithProjections
-      },
-      injuredPlayers: team1Injured
+      predictedScore: team1ProjScore
     },
     team2: {
       name: nbaTeams[team2Code].name,
       code: team2Code,
       probability: parseFloat(team2Prob.toFixed(1)),
-      predictedScore: team2ProjScore,
-      roster: {
-        topPlayers: team2PlayersWithProjections
-      },
-      injuredPlayers: team2Injured
+      predictedScore: team2ProjScore
     },
     confidence: confidence,
     keyFactors: factors,

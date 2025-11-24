@@ -1168,6 +1168,107 @@ function generateKeyFactors(stats1, stats2, team1, team2, weather, isTeam1Home) 
   return factors.length > 0 ? factors : ['Both teams evenly matched', 'Game could come down to final possession'];
 }
 
+// NBA Win Probability Algorithm
+async function calculateNBAWinProbability(team1Code, team2Code, isTeam1Home) {
+  const team1Stats = await getNBATeamStats(team1Code);
+  const team2Stats = await getNBATeamStats(team2Code);
+  
+  // 1. SCORING DIFFERENTIAL (Weight: 20%)
+  const ppgDiff = parseFloat(team1Stats.pointsPerGame) - parseFloat(team2Stats.pointsPerGame);
+  const scoringScore = ppgDiff * 0.8;
+  
+  // 2. HOME COURT ADVANTAGE (Weight: 8%)
+  const homeCourtScore = isTeam1Home ? 8 : -8;
+  
+  // 3. SHOOTING EFFICIENCY (Weight: 18%)
+  const fgDiff = parseFloat(team1Stats.fgPct) - parseFloat(team2Stats.fgPct);
+  const fg3Diff = parseFloat(team1Stats.fg3Pct) - parseFloat(team2Stats.fg3Pct);
+  const shootingScore = (fgDiff * 0.4) + (fg3Diff * 0.35);
+  
+  // 4. REBOUNDING (Weight: 12%)
+  const rebDiff = parseFloat(team1Stats.reboundsPerGame) - parseFloat(team2Stats.reboundsPerGame);
+  const reboundingScore = rebDiff * 0.6;
+  
+  // 5. BALL MOVEMENT & ASSISTS (Weight: 10%)
+  const astDiff = parseFloat(team1Stats.assistsPerGame) - parseFloat(team2Stats.assistsPerGame);
+  const assistScore = astDiff * 0.8;
+  
+  // 6. DEFENSE (Weight: 15%)
+  const defDiff = parseFloat(team2Stats.defensiveRating) - parseFloat(team1Stats.defensiveRating);
+  const defenseScore = defDiff * 0.15;
+  
+  // 7. PACE & TEMPO (Weight: 7%)
+  const pace1 = parseFloat(team1Stats.pace);
+  const pace2 = parseFloat(team2Stats.pace);
+  const avgPace = (pace1 + pace2) / 2;
+  const paceScore = (avgPace - 98) * 0.1;
+  
+  // 8. TURNOVERS (Weight: 10%)
+  const toDiff = parseFloat(team2Stats.turnoversPerGame) - parseFloat(team1Stats.turnoversPerGame);
+  const turnoverScore = toDiff * 0.8;
+  
+  // Calculate total score
+  const totalScore = scoringScore + homeCourtScore + shootingScore + 
+                     reboundingScore + assistScore + defenseScore + 
+                     paceScore + turnoverScore;
+  
+  // Convert to probability (0-100)
+  let team1Prob = 50 + totalScore;
+  team1Prob = Math.max(15, Math.min(85, team1Prob));
+  const team2Prob = 100 - team1Prob;
+  
+  // Predict scores based on averages and pace
+  const projectedPace = avgPace;
+  const paceMultiplier = projectedPace / 100;
+  
+  const team1ProjScore = Math.round(parseFloat(team1Stats.pointsPerGame) * paceMultiplier * (team1Prob / 50));
+  const team2ProjScore = Math.round(parseFloat(team2Stats.pointsPerGame) * paceMultiplier * (team2Prob / 50));
+  
+  // Confidence level
+  const probDiff = Math.abs(team1Prob - team2Prob);
+  let confidence = 'Medium';
+  if (probDiff > 25) confidence = 'High';
+  else if (probDiff < 10) confidence = 'Low';
+  
+  // Key factors
+  const factors = [];
+  if (Math.abs(ppgDiff) > 5) {
+    const higherScoring = ppgDiff > 0 ? team1Code : team2Code;
+    factors.push(`${nbaTeams[higherScoring].name} averaging ${Math.abs(ppgDiff).toFixed(1)} more PPG`);
+  }
+  if (Math.abs(fgDiff) > 3) {
+    const betterShooting = fgDiff > 0 ? team1Code : team2Code;
+    factors.push(`${nbaTeams[betterShooting].name} shooting ${Math.abs(fgDiff).toFixed(1)}% better from the field`);
+  }
+  if (Math.abs(rebDiff) > 5) {
+    const betterRebounding = rebDiff > 0 ? team1Code : team2Code;
+    factors.push(`${nbaTeams[betterRebounding].name} dominating the boards (+${Math.abs(rebDiff).toFixed(1)} RPG)`);
+  }
+  if (Math.abs(astDiff) > 3) {
+    const betterBallMovement = astDiff > 0 ? team1Code : team2Code;
+    factors.push(`${nbaTeams[betterBallMovement].name} superior ball movement (${Math.abs(astDiff).toFixed(1)} more APG)`);
+  }
+  if (isTeam1Home) {
+    factors.push(`${nbaTeams[team1Code].name} playing at home court`);
+  }
+  
+  return {
+    team1: nbaTeams[team1Code].name,
+    team2: nbaTeams[team2Code].name,
+    team1Code,
+    team2Code,
+    team1Probability: parseFloat(team1Prob.toFixed(1)),
+    team2Probability: parseFloat(team2Prob.toFixed(1)),
+    predictedScore: {
+      team1: team1ProjScore,
+      team2: team2ProjScore
+    },
+    confidence: confidence,
+    keyFactors: factors,
+    isTeam1Home: isTeam1Home
+  };
+}
+
 // Helper function to map ESPN team abbreviations to our codes
 function mapESPNTeamCode(espnTeam) {
   const mapping = {
@@ -1368,6 +1469,52 @@ app.get('/api/nba/games', async (req, res) => {
     res.json({ date: dateStr, games });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch NBA games', message: error.message });
+  }
+});
+
+app.get('/api/nba/games-with-predictions', async (req, res) => {
+  const { date } = req.query;
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  
+  try {
+    console.log(`🏀 Fetching NBA games for ${dateStr}...`);
+    const games = await fetchNBAGames(dateStr);
+    console.log(`✓ Found ${games.length} NBA games`);
+    
+    if (games.length === 0) {
+      return res.json({ date: dateStr, games: [] });
+    }
+    
+    const gamesWithPredictions = await Promise.all(
+      games.map(async (game) => {
+        try {
+          const prediction = await Promise.race([
+            calculateNBAWinProbability(
+              game.homeTeam.code,
+              game.awayTeam.code,
+              true
+            ),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Prediction timeout')), 8000)
+            )
+          ]);
+          
+          return {
+            ...game,
+            prediction
+          };
+        } catch (predError) {
+          console.warn(`Failed to predict ${game.awayTeam.code} @ ${game.homeTeam.code}:`, predError.message);
+          return game;
+        }
+      })
+    );
+    
+    console.log(`✓ Generated ${gamesWithPredictions.length} NBA predictions`);
+    res.json({ date: dateStr, games: gamesWithPredictions });
+  } catch (error) {
+    console.error('Error in /api/nba/games-with-predictions:', error);
+    res.status(500).json({ error: 'Failed to fetch NBA games with predictions', message: error.message });
   }
 });
 
@@ -2254,6 +2401,240 @@ app.get('/api/same-game-parlay', async (req, res) => {
   } catch (error) {
     console.error('Same-game parlay error:', error);
     res.status(500).json({ error: 'Failed to generate parlay', message: error.message });
+  }
+});
+
+// NBA Same-Game Parlay Generator
+app.get('/api/nba/same-game-parlay', async (req, res) => {
+  try {
+    const { homeTeam, awayTeam, gameId, gameDate } = req.query;
+    
+    if (!homeTeam || !awayTeam) {
+      return res.status(400).json({ error: 'homeTeam and awayTeam parameters required' });
+    }
+    
+    // Get all NBA player stats
+    const allPlayerStats = await getNBAPlayerStats();
+    
+    // Get team stats
+    const homeStats = await getNBATeamStats(homeTeam);
+    const awayStats = await getNBATeamStats(awayTeam);
+    
+    // Filter players by team
+    const homePlayers = Object.values(allPlayerStats).filter(p => p.team === homeTeam && p.gamesPlayed >= 5);
+    const awayPlayers = Object.values(allPlayerStats).filter(p => p.team === awayTeam && p.gamesPlayed >= 5);
+    
+    const props = [];
+    
+    // Helper to determine confidence based on consistency
+    const getConfidence = (avg, variance = 'medium') => {
+      if (variance === 'low' && avg > 20) return 'High';
+      if (variance === 'low' && avg > 15) return 'Medium';
+      if (avg > 25) return 'High';
+      if (avg > 15) return 'Medium';
+      return 'Low';
+    };
+    
+    // HOME TEAM PROPS
+    // Top 3 scorers
+    const homeScorers = homePlayers.filter(p => p.points > 10).sort((a, b) => b.points - a.points).slice(0, 3);
+    for (const player of homeScorers) {
+      // Points
+      const pointsLine = Math.round(player.points - 0.5);
+      props.push({
+        playerId: player.playerId,
+        player: player.name,
+        team: homeTeam,
+        prop: 'Points',
+        line: player.points,
+        over: pointsLine,
+        under: pointsLine,
+        recommendation: player.points > pointsLine + 2 ? 'OVER' : player.points < pointsLine - 2 ? 'UNDER' : 'PASS',
+        confidence: getConfidence(player.points)
+      });
+      
+      // Rebounds (if player gets 5+)
+      if (player.rebounds >= 5) {
+        const rebLine = Math.round(player.rebounds - 0.5);
+        props.push({
+          playerId: player.playerId,
+          player: player.name,
+          team: homeTeam,
+          prop: 'Rebounds',
+          line: player.rebounds,
+          over: rebLine,
+          under: rebLine,
+          recommendation: player.rebounds > rebLine + 1 ? 'OVER' : player.rebounds < rebLine - 1 ? 'UNDER' : 'PASS',
+          confidence: player.rebounds > 8 ? 'High' : player.rebounds > 5 ? 'Medium' : 'Low'
+        });
+      }
+      
+      // Assists (if player gets 4+)
+      if (player.assists >= 4) {
+        const astLine = Math.round(player.assists - 0.5);
+        props.push({
+          playerId: player.playerId,
+          player: player.name,
+          team: homeTeam,
+          prop: 'Assists',
+          line: player.assists,
+          over: astLine,
+          under: astLine,
+          recommendation: player.assists > astLine + 1 ? 'OVER' : player.assists < astLine - 1 ? 'UNDER' : 'PASS',
+          confidence: player.assists > 7 ? 'High' : player.assists > 4 ? 'Medium' : 'Low'
+        });
+      }
+      
+      // 3-Pointers Made (if player hits 2+)
+      if (player.fg3Made >= 2) {
+        const threesPtLine = (player.fg3Made - 0.5).toFixed(1);
+        props.push({
+          playerId: player.playerId,
+          player: player.name,
+          team: homeTeam,
+          prop: '3-Pointers Made',
+          line: player.fg3Made,
+          over: threesPtLine,
+          under: threesPtLine,
+          recommendation: player.fg3Made > parseFloat(threesPtLine) + 0.3 ? 'OVER' : player.fg3Made < parseFloat(threesPtLine) - 0.3 ? 'UNDER' : 'PASS',
+          confidence: player.fg3Made > 3 ? 'High' : player.fg3Made > 2 ? 'Medium' : 'Low'
+        });
+      }
+    }
+    
+    // AWAY TEAM PROPS
+    // Top 3 scorers
+    const awayScorers = awayPlayers.filter(p => p.points > 10).sort((a, b) => b.points - a.points).slice(0, 3);
+    for (const player of awayScorers) {
+      // Points
+      const pointsLine = Math.round(player.points - 0.5);
+      props.push({
+        playerId: player.playerId,
+        player: player.name,
+        team: awayTeam,
+        prop: 'Points',
+        line: player.points,
+        over: pointsLine,
+        under: pointsLine,
+        recommendation: player.points > pointsLine + 2 ? 'OVER' : player.points < pointsLine - 2 ? 'UNDER' : 'PASS',
+        confidence: getConfidence(player.points)
+      });
+      
+      // Rebounds (if player gets 5+)
+      if (player.rebounds >= 5) {
+        const rebLine = Math.round(player.rebounds - 0.5);
+        props.push({
+          playerId: player.playerId,
+          player: player.name,
+          team: awayTeam,
+          prop: 'Rebounds',
+          line: player.rebounds,
+          over: rebLine,
+          under: rebLine,
+          recommendation: player.rebounds > rebLine + 1 ? 'OVER' : player.rebounds < rebLine - 1 ? 'UNDER' : 'PASS',
+          confidence: player.rebounds > 8 ? 'High' : player.rebounds > 5 ? 'Medium' : 'Low'
+        });
+      }
+      
+      // Assists (if player gets 4+)
+      if (player.assists >= 4) {
+        const astLine = Math.round(player.assists - 0.5);
+        props.push({
+          playerId: player.playerId,
+          player: player.name,
+          team: awayTeam,
+          prop: 'Assists',
+          line: player.assists,
+          over: astLine,
+          under: astLine,
+          recommendation: player.assists > astLine + 1 ? 'OVER' : player.assists < astLine - 1 ? 'UNDER' : 'PASS',
+          confidence: player.assists > 7 ? 'High' : player.assists > 4 ? 'Medium' : 'Low'
+        });
+      }
+      
+      // 3-Pointers Made (if player hits 2+)
+      if (player.fg3Made >= 2) {
+        const threesPtLine = (player.fg3Made - 0.5).toFixed(1);
+        props.push({
+          playerId: player.playerId,
+          player: player.name,
+          team: awayTeam,
+          prop: '3-Pointers Made',
+          line: player.fg3Made,
+          over: threesPtLine,
+          under: threesPtLine,
+          recommendation: player.fg3Made > parseFloat(threesPtLine) + 0.3 ? 'OVER' : player.fg3Made < parseFloat(threesPtLine) - 0.3 ? 'UNDER' : 'PASS',
+          confidence: player.fg3Made > 3 ? 'High' : player.fg3Made > 2 ? 'Medium' : 'Low'
+        });
+      }
+    }
+    
+    // Generate multiple parlay strategies (same as NFL)
+    const highConfProps = props.filter(p => p.confidence === 'High' && p.recommendation !== 'PASS');
+    const mediumConfProps = props.filter(p => p.confidence === 'Medium' && p.recommendation !== 'PASS');
+    const allGoodProps = props.filter(p => p.recommendation !== 'PASS' && p.confidence !== 'Low');
+    
+    // Strategy 1: Conservative
+    const conservativeParlay = highConfProps.slice(0, 5);
+    const conservativeOdds = conservativeParlay.length > 0 ? `+${Math.round(Math.pow(1.83, conservativeParlay.length) * 100)}` : 'N/A';
+    
+    // Strategy 2: Balanced
+    const balancedParlay = [];
+    balancedParlay.push(...highConfProps.slice(0, 3), ...mediumConfProps.slice(0, 3));
+    const balancedOdds = balancedParlay.length > 0 ? `+${Math.round(Math.pow(1.83, balancedParlay.length) * 100)}` : 'N/A';
+    
+    // Strategy 3: Aggressive
+    const valueProps = allGoodProps.map(p => {
+      const edge = p.recommendation === 'OVER' ? p.line - p.over : p.over - p.line;
+      return { ...p, edge };
+    }).sort((a, b) => b.edge - a.edge).slice(0, 8);
+    const aggressiveOdds = valueProps.length > 0 ? `+${Math.round(Math.pow(1.83, valueProps.length) * 100)}` : 'N/A';
+    
+    // Strategy 4: Risky Value (3PM + big scoring nights)
+    const riskyParlay = [];
+    const threePtProps = allGoodProps.filter(p => p.prop === '3-Pointers Made');
+    const bigScoringProps = allGoodProps.filter(p => p.prop === 'Points' && p.line >= 25);
+    riskyParlay.push(...threePtProps.slice(0, 2), ...bigScoringProps.slice(0, 3));
+    const riskyOdds = riskyParlay.length > 0 ? `+${Math.round(Math.pow(1.83, riskyParlay.length) * 100)}` : 'N/A';
+    
+    const suggestedParlay = balancedParlay.length > 0 ? balancedParlay : conservativeParlay;
+    
+    res.json({
+      game: `${awayTeam} @ ${homeTeam}`,
+      allProps: props,
+      suggestedParlay: suggestedParlay,
+      parlayOdds: suggestedParlay.length > 0 ? `+${Math.round(Math.pow(1.83, suggestedParlay.length) * 100)}` : 'N/A',
+      parlayStrategies: {
+        conservative: {
+          name: 'Conservative (High Confidence Only)',
+          picks: conservativeParlay,
+          odds: conservativeOdds,
+          description: `${conservativeParlay.length} legs - Lower risk, all high confidence picks`
+        },
+        balanced: {
+          name: 'Balanced (High + Medium Mix)',
+          picks: balancedParlay,
+          odds: balancedOdds,
+          description: `${balancedParlay.length} legs - Best balance of risk and reward`
+        },
+        aggressive: {
+          name: 'Aggressive (Best Value Picks)',
+          picks: valueProps,
+          odds: aggressiveOdds,
+          description: `${valueProps.length} legs - Higher payout, more risk`
+        },
+        risky: {
+          name: 'Risky Value (3PT Heavy)',
+          picks: riskyParlay,
+          odds: riskyOdds,
+          description: `${riskyParlay.length} legs - 3-pointers + big scoring nights, high risk/reward`
+        }
+      }
+    });
+    
+  } catch (error) {
+    console.error('NBA Same-game parlay error:', error);
+    res.status(500).json({ error: 'Failed to generate NBA parlay', message: error.message });
   }
 });
 

@@ -1272,30 +1272,52 @@ app.get('/api/games-with-predictions', async (req, res) => {
   const dateStr = date || new Date().toISOString().split('T')[0];
   
   try {
+    console.log(`📊 Fetching games for ${dateStr}...`);
     const games = await fetchNFLGames(dateStr);
+    console.log(`✓ Found ${games.length} games`);
     
-    // Add predictions to each game
+    if (games.length === 0) {
+      return res.json({ date: dateStr, games: [] });
+    }
+    
+    // Add predictions to each game with timeout protection
     const gamesWithPredictions = await Promise.all(
       games.map(async (game) => {
-        const prediction = await calculateWinProbability(
-          game.homeTeam.code,
-          game.awayTeam.code,
-          true,
-          dateStr
-        );
-        
-        // Save prediction to database
-        db.savePrediction(prediction, game.id, dateStr);
-        
-        return {
-          ...game,
-          prediction
-        };
+        try {
+          const prediction = await Promise.race([
+            calculateWinProbability(
+              game.homeTeam.code,
+              game.awayTeam.code,
+              true,
+              dateStr
+            ),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Prediction timeout')), 8000)
+            )
+          ]);
+          
+          // Save prediction to database (don't await to avoid blocking)
+          if (db.savePrediction) {
+            db.savePrediction(prediction, game.id, dateStr).catch(err => 
+              console.warn('Failed to save prediction:', err.message)
+            );
+          }
+          
+          return {
+            ...game,
+            prediction
+          };
+        } catch (predError) {
+          console.warn(`Failed to predict ${game.awayTeam.code} @ ${game.homeTeam.code}:`, predError.message);
+          return game; // Return game without prediction
+        }
       })
     );
     
+    console.log(`✓ Generated ${gamesWithPredictions.length} predictions`);
     res.json({ date: dateStr, games: gamesWithPredictions });
   } catch (error) {
+    console.error('Error in /api/games-with-predictions:', error);
     res.status(500).json({ error: 'Failed to fetch games with predictions', message: error.message });
   }
 });
@@ -1942,6 +1964,15 @@ function scheduleAutoPredictions() {
   console.log('   - Updates player prop results');
   console.log('   - Generates predictions for upcoming games');
 }
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    env: process.env.VERCEL ? 'production' : 'development'
+  });
+});
 
 // Serve the main page
 app.get('/', (req, res) => {

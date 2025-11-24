@@ -82,6 +82,18 @@ const espnTeamIds = {
 async function fetchTeamRoster(teamCode) {
   const players = await getSleeperPlayers();
   const allStats = await getSleeperStats();
+  
+  // If no Sleeper data (e.g., on Vercel), return minimal roster
+  if (Object.keys(players).length === 0 || Object.keys(allStats).length === 0) {
+    return {
+      quarterbacks: [],
+      runningBacks: [],
+      wideReceivers: [],
+      tightEnds: [],
+      defense: []
+    };
+  }
+  
   const injuryData = await getInjuryData();
   
   const roster = {
@@ -204,17 +216,23 @@ async function fetchTeamRoster(teamCode) {
 let sleeperPlayerCache = null;
 let sleeperStatsCache = null;
 
-// Fetch Sleeper player database
+// Fetch Sleeper player database with timeout
 async function getSleeperPlayers() {
   if (sleeperPlayerCache) return sleeperPlayerCache;
   
+  // On Vercel, skip to avoid timeout
+  if (process.env.VERCEL) {
+    console.log('⚡ Skipping Sleeper player database on Vercel (performance optimization)');
+    return {};
+  }
+  
   try {
-    const response = await axios.get('https://api.sleeper.app/v1/players/nfl', { timeout: 10000 });
+    const response = await axios.get('https://api.sleeper.app/v1/players/nfl', { timeout: 5000 });
     sleeperPlayerCache = response.data;
     console.log('✓ Loaded Sleeper player database');
     return sleeperPlayerCache;
   } catch (error) {
-    console.error('Failed to load Sleeper players:', error.message);
+    console.warn('⚠️  Failed to load Sleeper players:', error.message);
     return {};
   }
 }
@@ -223,13 +241,19 @@ async function getSleeperPlayers() {
 async function getSleeperStats() {
   if (sleeperStatsCache) return sleeperStatsCache;
   
+  // On Vercel, skip to avoid timeout
+  if (process.env.VERCEL) {
+    console.log('⚡ Skipping Sleeper stats on Vercel (performance optimization)');
+    return {};
+  }
+  
   try {
-    const response = await axios.get('https://api.sleeper.app/v1/stats/nfl/regular/2025', { timeout: 15000 });
+    const response = await axios.get('https://api.sleeper.app/v1/stats/nfl/regular/2025', { timeout: 5000 });
     sleeperStatsCache = response.data;
     console.log('✓ Loaded 2025 NFL season stats from Sleeper');
     return sleeperStatsCache;
   } catch (error) {
-    console.error('Failed to load Sleeper stats:', error.message);
+    console.warn('⚠️  Failed to load Sleeper stats:', error.message);
     return {};
   }
 }

@@ -1204,16 +1204,23 @@ async function fetchNFLGames(dateStr) {
       // Skip if we don't have these teams
       if (!nflTeams[homeCode] || !nflTeams[awayCode]) continue;
       
-      // Filter by date - convert UTC game time to EST date string
+      // Filter by date - convert UTC to EST (EST is UTC-5 or UTC-4 during DST)
       const gameDate = new Date(event.date);
-      // Get date parts in EST timezone
-      const year = gameDate.toLocaleString('en-US', { timeZone: 'America/New_York', year: 'numeric' });
-      const month = gameDate.toLocaleString('en-US', { timeZone: 'America/New_York', month: '2-digit' });
-      const day = gameDate.toLocaleString('en-US', { timeZone: 'America/New_York', day: '2-digit' });
-      const gameDateStr = `${year}-${month}-${day}`;
+      const utcDate = new Date(gameDate.getTime());
+      // EST offset: -5 hours (or -4 during daylight saving time)
+      // Use Intl to get the correct offset
+      const estString = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(gameDate);
+      // Parse MM/DD/YYYY format
+      const parts = estString.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      const gameDateStr = parts ? `${parts[3]}-${parts[1]}-${parts[2]}` : null;
       
       // Skip if game is not on the requested date (in EST)
-      if (dateStr && gameDateStr !== dateStr) continue;
+      if (!gameDateStr || (dateStr && gameDateStr !== dateStr)) continue;
       
       games.push({
         id: event.id,

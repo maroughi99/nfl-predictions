@@ -1762,9 +1762,11 @@ app.get('/api/same-game-parlay', async (req, res) => {
       });
     }
     
-    // Home RB
-    const homeRB = homePlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
-      .sort((a, b) => b.rushYards - a.rushYards)[0];
+    // Home RBs (top 2)
+    const homeRBs = homePlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
+      .sort((a, b) => b.rushYards - a.rushYards).slice(0, 2);
+    
+    for (const homeRB of homeRBs) {
     if (homeRB && (!activeRoster || activeRoster.has(homeRB.name))) {
       const baseAvg = homeRB.rushYardsPerGame;
       // Adjust based on opponent scoring (high scoring = more passing, less rushing)
@@ -1784,10 +1786,13 @@ app.get('/api/same-game-parlay', async (req, res) => {
         confidence: baseAvg > 100 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
       });
     }
+    }
     
-    // Away RB
-    const awayRB = awayPlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
-      .sort((a, b) => b.rushYards - a.rushYards)[0];
+    // Away RBs (top 2)
+    const awayRBs = awayPlayers.filter(p => p.position === 'RB' && p.rushYards > 0)
+      .sort((a, b) => b.rushYards - a.rushYards).slice(0, 2);
+    
+    for (const awayRB of awayRBs) {
     if (awayRB && (!activeRoster || activeRoster.has(awayRB.name))) {
       const baseAvg = awayRB.rushYardsPerGame;
       const gameScriptAdj = homeStats.pointsPerGame > 26 ? -8 : homeStats.pointsPerGame < 18 ? 8 : 0;
@@ -1806,10 +1811,13 @@ app.get('/api/same-game-parlay', async (req, res) => {
         confidence: baseAvg > 100 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
       });
     }
+    }
     
-    // Home WR/TE
-    const homeWR = homePlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
-      .sort((a, b) => b.recYards - a.recYards)[0];
+    // Home WR/TEs (top 3)
+    const homeWRs = homePlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
+      .sort((a, b) => b.recYards - a.recYards).slice(0, 3);
+    
+    for (const homeWR of homeWRs) {
     if (homeWR && (!activeRoster || activeRoster.has(homeWR.name))) {
       const baseAvg = homeWR.recYardsPerGame;
       // Adjust for opponent secondary strength
@@ -1829,10 +1837,13 @@ app.get('/api/same-game-parlay', async (req, res) => {
         confidence: baseAvg > 90 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
       });
     }
+    }
     
-    // Away WR/TE
-    const awayWR = awayPlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
-      .sort((a, b) => b.recYards - a.recYards)[0];
+    // Away WR/TEs (top 3)
+    const awayWRs = awayPlayers.filter(p => (p.position === 'WR' || p.position === 'TE') && p.recYards > 0)
+      .sort((a, b) => b.recYards - a.recYards).slice(0, 3);
+    
+    for (const awayWR of awayWRs) {
     if (awayWR && (!activeRoster || activeRoster.has(awayWR.name))) {
       const baseAvg = awayWR.recYardsPerGame;
       const coverageAdj = homeStats.pointsPerGame > 28 ? -6 : homeStats.pointsPerGame < 18 ? 6 : 0;
@@ -1850,6 +1861,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
         recommendation: baseAvg > bookieLine + 5 ? 'OVER' : baseAvg < bookieLine - 5 ? 'UNDER' : 'PASS',
         confidence: baseAvg > 90 ? 'High' : baseAvg > 60 ? 'Medium' : 'Low'
       });
+    }
     }
     
     // Generate suggested parlay

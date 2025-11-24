@@ -2091,6 +2091,16 @@ app.get('/api/same-game-parlay', async (req, res) => {
     }).sort((a, b) => b.edge - a.edge).slice(0, 8);
     const aggressiveOdds = valueProps.length > 0 ? `+${Math.round(Math.pow(1.83, valueProps.length) * 100)}` : 'N/A';
     
+    // Strategy 4: Risky Value - Mix of high-upside picks (medium confidence, TDs, big plays) (4-5 legs)
+    const riskyParlay = [];
+    // Get TD props (higher variance, bigger payouts)
+    const tdProps = allGoodProps.filter(p => p.prop.includes('TD'));
+    // Get medium confidence players with good averages
+    const mediumUpside = mediumConfProps.filter(p => p.line >= (p.prop.includes('Yards') ? 60 : p.prop.includes('Receptions') ? 5 : 1.5));
+    // Mix TDs with solid medium confidence picks
+    riskyParlay.push(...tdProps.slice(0, 2), ...mediumUpside.slice(0, 3));
+    const riskyOdds = riskyParlay.length > 0 ? `+${Math.round(Math.pow(1.83, riskyParlay.length) * 100)}` : 'N/A';
+    
     // Default to balanced if available, otherwise conservative
     const suggestedParlay = balancedParlay.length > 0 ? balancedParlay : conservativeParlay
     
@@ -2133,7 +2143,7 @@ app.get('/api/same-game-parlay', async (req, res) => {
           name: 'Conservative (High Confidence Only)',
           picks: conservativeParlay,
           odds: conservativeOdds,
-          description: `${conservativeParlay.length} legs - Lower risk, all high confidence`
+          description: `${conservativeParlay.length} legs - Lower risk, all high confidence picks`
         },
         balanced: {
           name: 'Balanced (High + Medium Mix)',
@@ -2146,6 +2156,12 @@ app.get('/api/same-game-parlay', async (req, res) => {
           picks: valueProps,
           odds: aggressiveOdds,
           description: `${valueProps.length} legs - Higher payout, more risk`
+        },
+        risky: {
+          name: 'Risky Value (TD Heavy)',
+          picks: riskyParlay,
+          odds: riskyOdds,
+          description: `${riskyParlay.length} legs - TDs + big plays, high risk/reward`
         }
       }
     });

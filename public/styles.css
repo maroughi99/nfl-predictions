@@ -1296,6 +1296,11 @@ body::before {
     border-color: var(--primary);
 }
 
+.parlay-strategy.risky {
+    background: linear-gradient(135deg, rgba(255, 107, 157, 0.1), rgba(255, 160, 107, 0.1));
+    border-color: var(--accent-red);
+}
+
 .strategy-header {
     display: flex;
     justify-content: space-between;
@@ -1316,6 +1321,17 @@ body::before {
 
 .recommended-badge {
     background: var(--success-gradient);
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-left: 0.5rem;
+}
+
+.risky-badge {
+    background: linear-gradient(135deg, #ff6b9d, #ffa06b);
     color: white;
     padding: 0.3rem 0.8rem;
     border-radius: 20px;

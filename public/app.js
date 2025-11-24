@@ -1000,6 +1000,22 @@ async function generateParlay() {
                     </div>
                 `;
             }
+            
+            // Risky Value Strategy
+            if (data.parlayStrategies.risky && data.parlayStrategies.risky.picks.length > 0) {
+                strategiesHTML += `
+                    <div class="parlay-strategy risky">
+                        <div class="strategy-header">
+                            <h3>💎 ${data.parlayStrategies.risky.name} <span class="risky-badge">YOLO</span></h3>
+                            <span class="strategy-odds">${data.parlayStrategies.risky.odds}</span>
+                        </div>
+                        <p class="strategy-description">${data.parlayStrategies.risky.description}</p>
+                        <div class="strategy-picks">
+                            ${data.parlayStrategies.risky.picks.map(prop => createPropCard(prop, true)).join('')}
+                        </div>
+                    </div>
+                `;
+            }
         }
         
         suggestedList.innerHTML = strategiesHTML;

@@ -419,6 +419,7 @@ function getPendingPropPredictions() {
 initDatabase();
 
 module.exports = {
+  initDatabase,
   savePrediction,
   saveActualResult,
   getPredictionsWithResults,

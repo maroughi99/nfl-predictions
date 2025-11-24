@@ -71,8 +71,8 @@ function switchSport(sport) {
     
     // Reload games for new sport
     currentDate = new Date();
-    loadTodaysGames();
     updateDateDisplay();
+    loadTodaysGames();
 }
 
 // Switch tabs
@@ -318,12 +318,13 @@ function updateDateDisplay() {
     const selected = new Date(currentDate);
     selected.setHours(0, 0, 0, 0);
     
+    const sportName = currentSport.toUpperCase();
     if (selected.getTime() === today.getTime()) {
-        document.getElementById('gamesTitle').textContent = "Today's NFL Games";
+        document.getElementById('gamesTitle').textContent = `Today's ${sportName} Games`;
     } else if (selected < today) {
-        document.getElementById('gamesTitle').textContent = "Past NFL Games";
+        document.getElementById('gamesTitle').textContent = `Past ${sportName} Games`;
     } else {
-        document.getElementById('gamesTitle').textContent = "Upcoming NFL Games";
+        document.getElementById('gamesTitle').textContent = `Upcoming ${sportName} Games`;
     }
 }
 

@@ -26,14 +26,31 @@
                             </linearGradient>
                         </defs>
                     </svg>
-                    <h1>NFL Prediction Analyzer</h1>
+                    <h1><span id="sportName">NFL</span> Prediction Analyzer</h1>
                 </div>
                 <div class="header-subtitle">
                     <span class="ai-badge">AI POWERED</span>
-                    <span>Real-time NFL game predictions & analytics</span>
+                    <span id="sportSubtitle">Real-time NFL game predictions & analytics</span>
                 </div>
             </div>
         </header>
+
+        <!-- Sport Selector -->
+        <div class="sport-selector">
+            <button class="sport-btn active" data-sport="nfl">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                </svg>
+                NFL
+            </button>
+            <button class="sport-btn" data-sport="nba">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 2v20M2 12h20" stroke="white" stroke-width="1.5"/>
+                </svg>
+                NBA
+            </button>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">

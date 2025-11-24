@@ -13,9 +13,18 @@ function getESTDateString(date) {
 }
 
 // State
+let currentSport = 'nfl'; // 'nfl' or 'nba'
 let currentDate = new Date();
 let todaysGames = [];
 let currentPrediction = null;
+
+// Get API endpoint based on current sport
+function getAPIPath(endpoint) {
+    if (currentSport === 'nba') {
+        return `${API_BASE}/nba/${endpoint}`;
+    }
+    return `${API_BASE}/${endpoint}`;
+}
 
 // Initialize the app
 document.addEventListener('DOMContentLoaded', async () => {
@@ -30,6 +39,11 @@ function setupEventListeners() {
     document.getElementById('prevDay').addEventListener('click', () => changeDate(-1));
     document.getElementById('nextDay').addEventListener('click', () => changeDate(1));
     
+    // Sport switching
+    document.querySelectorAll('.sport-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchSport(btn.dataset.sport));
+    });
+    
     // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -38,6 +52,29 @@ function setupEventListeners() {
     // History tab buttons
     document.getElementById('updateResultsBtn')?.addEventListener('click', updateResults);
     document.getElementById('updatePropResultsBtn')?.addEventListener('click', updatePropResults);
+}
+
+// Switch sports (NFL <-> NBA)
+function switchSport(sport) {
+    if (currentSport === sport) return;
+    
+    currentSport = sport;
+    
+    // Update sport buttons
+    document.querySelectorAll('.sport-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sport === sport);
+    });
+    
+    // Update header
+    const sportName = sport.toUpperCase();
+    document.getElementById('sportName').textContent = sportName;
+    document.getElementById('sportSubtitle').textContent = 
+        `Real-time ${sportName} game predictions & analytics`;
+    
+    // Reload games for new sport
+    currentDate = new Date();
+    loadTodaysGames();
+    updateDateDisplay();
 }
 
 // Switch tabs
@@ -297,12 +334,13 @@ async function loadTodaysGames() {
     const statusDiv = document.getElementById('gamesStatus');
     const gamesListDiv = document.getElementById('todaysGamesList');
     
-    statusDiv.innerHTML = '<div class="loading-spinner">Loading NFL games and predictions...</div>';
+    const sportName = currentSport.toUpperCase();
+    statusDiv.innerHTML = `<div class="loading-spinner">Loading ${sportName} games and predictions...</div>`;
     gamesListDiv.innerHTML = '';
     
     try {
         const dateStr = getESTDateString(currentDate);
-        const response = await fetch(`${API_BASE}/games-with-predictions?date=${dateStr}`);
+        const response = await fetch(getAPIPath(`games-with-predictions?date=${dateStr}`));
         const data = await response.json();
         
         if (response.ok) {
@@ -312,7 +350,7 @@ async function loadTodaysGames() {
                 statusDiv.innerHTML = `
                     <div class="no-games-message">
                         <h3>No Games Scheduled</h3>
-                        <p>There are no NFL games scheduled for this date.</p>
+                        <p>There are no ${sportName} games scheduled for this date.</p>
                         <p>Try checking another day!</p>
                     </div>
                 `;
@@ -337,7 +375,7 @@ async function loadTodaysGames() {
         statusDiv.innerHTML = `
             <div class="no-games-message">
                 <h3>Connection Error</h3>
-                <p>Unable to fetch NFL games. Please check your connection and try again.</p>
+                <p>Unable to fetch ${sportName} games. Please check your connection and try again.</p>
             </div>
         `;
     }
@@ -907,17 +945,19 @@ function createPlayerCard(player, position) {
 // Same Game Parlay Functions
 async function loadParlayGames() {
     try {
-        const response = await fetch(`${API_BASE}/upcoming-games`);
-        const games = await response.json();
+        const dateStr = getESTDateString(currentDate);
+        const response = await fetch(getAPIPath(`games?date=${dateStr}`));
+        const data = await response.json();
+        const games = data.games || [];
         
         const select = document.getElementById('parlayGameSelect');
         select.innerHTML = '<option value="">-- Select a game --</option>';
         
         games.forEach(game => {
             const option = document.createElement('option');
-            option.value = `${game.homeTeam}|${game.team1}|${game.id}|${game.gameDate}`;
-            const gameDate = new Date(game.gameTime).toLocaleString();
-            option.textContent = `${game.team1} @ ${game.homeTeam} (${gameDate})`;
+            option.value = `${game.homeTeam.code}|${game.awayTeam.code}|${game.id}|${dateStr}`;
+            const gameDate = new Date(game.date).toLocaleString();
+            option.textContent = `${game.awayTeam.code} @ ${game.homeTeam.code} (${gameDate})`;
             select.appendChild(option);
         });
         
@@ -945,7 +985,7 @@ async function generateParlay() {
     document.getElementById('parlayResults').style.display = 'none';
     
     try {
-        const response = await fetch(`${API_BASE}/same-game-parlay?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}`);
+        const response = await fetch(getAPIPath(`same-game-parlay?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}`));
         const data = await response.json();
         
         // Display suggested parlays - show all three strategies

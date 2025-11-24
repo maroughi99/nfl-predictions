@@ -4,7 +4,12 @@ const path = require('path');
 const axios = require('axios');
 const nflRealPlayers = require('./realPlayers');
 const { scrapeNFLInjuries, isPlayerOut } = require('./injuryScraper');
-const db = require('./database');
+
+// Use PostgreSQL on Vercel, SQLite locally
+const db = process.env.POSTGRES_URL 
+  ? require('./database-postgres')
+  : require('./database');
+
 require('dotenv').config();
 
 const app = express();
@@ -1943,7 +1948,19 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`NFL Prediction Server running on http://localhost:${PORT}`);
-  scheduleAutoPredictions();
-});
+// Initialize database and start server
+async function startServer() {
+  try {
+    await db.initDatabase();
+    
+    app.listen(PORT, () => {
+      console.log(`NFL Prediction Server running on http://localhost:${PORT}`);
+      scheduleAutoPredictions();
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();

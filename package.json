@@ -20,6 +20,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@vercel/postgres": "^0.10.0",
     "axios": "^1.6.2",
     "better-sqlite3": "^12.4.6",
     "cheerio": "^1.1.2",

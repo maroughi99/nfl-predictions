@@ -1204,17 +1204,12 @@ async function fetchNFLGames(dateStr) {
       // Skip if we don't have these teams
       if (!nflTeams[homeCode] || !nflTeams[awayCode]) continue;
       
-      // Filter by date - get the game date in EST timezone
+      // Filter by date - convert UTC game time to EST date string
       const gameDate = new Date(event.date);
-      // Format the EST date directly without double conversion
-      const estDateString = gameDate.toLocaleDateString('en-US', { 
-        timeZone: 'America/New_York',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
-      // Convert MM/DD/YYYY to YYYY-MM-DD
-      const [month, day, year] = estDateString.split('/');
+      // Get date parts in EST timezone
+      const year = gameDate.toLocaleString('en-US', { timeZone: 'America/New_York', year: 'numeric' });
+      const month = gameDate.toLocaleString('en-US', { timeZone: 'America/New_York', month: '2-digit' });
+      const day = gameDate.toLocaleString('en-US', { timeZone: 'America/New_York', day: '2-digit' });
       const gameDateStr = `${year}-${month}-${day}`;
       
       // Skip if game is not on the requested date (in EST)

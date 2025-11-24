@@ -3050,7 +3050,7 @@ app.post('/api/batch-predict', async (req, res) => {
     console.log(`\n📊 Batch predicting NFL games for ${date}...`);
 
     // Get games with predictions
-    const response = await axios.get(`http://localhost:${PORT}/api/games-with-predictions?date=${date}`);
+    const response = await axios.get(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:' + PORT}/api/games-with-predictions?date=${date}`);
     const games = response.data.games;
 
     let saved = 0;
@@ -3095,7 +3095,7 @@ app.post('/api/nba/batch-predict', async (req, res) => {
     console.log(`\n🏀 Batch predicting NBA games for ${date}...`);
 
     // Get games with predictions
-    const response = await axios.get(`http://localhost:${PORT}/api/nba/games-with-predictions?date=${date}`);
+    const response = await axios.get(`${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:' + PORT}/api/nba/games-with-predictions?date=${date}`);
     const games = response.data.games;
 
     let saved = 0;

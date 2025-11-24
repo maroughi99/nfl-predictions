@@ -40,7 +40,7 @@ async function getNBAPlayerStats() {
     const url = 'https://stats.nba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=2024-25&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision=&Weight=';
     
     const response = await axios.get(url, {
-      timeout: 10000,
+      timeout: 30000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json',
@@ -127,14 +127,16 @@ async function getNBAPlayerStats() {
 
 // Get team stats from aggregated player data
 async function getNBATeamStats(teamCode) {
-  const allPlayerStats = await getNBAPlayerStats();
-  
-  // Filter players by team
-  const teamPlayers = Object.values(allPlayerStats).filter(p => p.team === teamCode);
-  
-  if (teamPlayers.length === 0) {
-    return getDefaultNBATeamStats();
-  }
+  try {
+    const allPlayerStats = await getNBAPlayerStats();
+    
+    // Filter players by team
+    const teamPlayers = Object.values(allPlayerStats).filter(p => p.team === teamCode);
+    
+    if (teamPlayers.length === 0) {
+      console.log(`⚠️  No players found for ${teamCode}, using defaults`);
+      return getDefaultNBATeamStats();
+    }
   
   // Use realistic NBA team averages with slight variation
   // NBA teams average 110-115 points per game in 2024-25 season
@@ -166,6 +168,10 @@ async function getNBATeamStats(teamCode) {
     defensiveRating: (115 - variation).toFixed(1),
     pace: (98 + (variation * 0.3)).toFixed(1)
   };
+  } catch (error) {
+    console.error(`⚠️  Error fetching team stats for ${teamCode}:`, error.message);
+    return getDefaultNBATeamStats();
+  }
 }
 
 function getDefaultNBATeamStats() {

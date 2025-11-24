@@ -1515,7 +1515,7 @@ app.get('/api/nba/games-with-predictions', async (req, res) => {
               true
             ),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Prediction timeout')), 15000)
+              setTimeout(() => reject(new Error('Prediction timeout')), 45000)
             )
           ]);
           

@@ -883,10 +883,20 @@ function createPlayerCard(player, position) {
         `;
     }
     
+    const playerImageUrl = player.playerId 
+        ? `https://sleepercdn.com/content/nfl/players/${player.playerId}.jpg`
+        : `https://sleepercdn.com/images/v2/icons/player_default.webp`;
+    
     card.innerHTML = `
         <div class="player-header">
-            <div class="player-name">${player.name}</div>
-            <div class="player-number">#${player.number} ${player.position}</div>
+            <img src="${playerImageUrl}" 
+                 alt="${player.name}" 
+                 class="player-headshot-stats"
+                 onerror="this.src='https://sleepercdn.com/images/v2/icons/player_default.webp'">
+            <div class="player-header-info">
+                <div class="player-name">${player.name}</div>
+                <div class="player-number">#${player.number} ${player.position}</div>
+            </div>
         </div>
         ${statsHTML}
     `;

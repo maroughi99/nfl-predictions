@@ -905,11 +905,28 @@ body::before {
 
 .player-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: 1rem;
     margin-bottom: 1rem;
     padding-bottom: 0.8rem;
     border-bottom: 1px solid var(--border-color);
+}
+
+.player-headshot-stats {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border-color);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+}
+
+.player-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
 }
 
 .player-name {
@@ -919,8 +936,8 @@ body::before {
 }
 
 .player-number {
-    font-size: 1.1rem;
-    font-weight: 700;
+    font-size: 0.95rem;
+    font-weight: 600;
     color: var(--text-secondary);
 }
 

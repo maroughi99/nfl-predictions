@@ -122,6 +122,7 @@ async function fetchTeamRoster(teamCode) {
   for (const qb of qbs) {
     const statsData = await fetchRealPlayerStats(qb.name, 'QB', teamCode);
     roster.quarterbacks.push({
+      playerId: qb.id,
       name: qb.name,
       position: 'QB',
       number: qb.number,
@@ -138,6 +139,7 @@ async function fetchTeamRoster(teamCode) {
   for (const rb of rbs) {
     const statsData = await fetchRealPlayerStats(rb.name, 'RB', teamCode);
     roster.runningBacks.push({
+      playerId: rb.id,
       name: rb.name,
       position: 'RB',
       number: rb.number,
@@ -154,6 +156,7 @@ async function fetchTeamRoster(teamCode) {
   for (const wr of wrs) {
     const statsData = await fetchRealPlayerStats(wr.name, 'WR', teamCode);
     roster.wideReceivers.push({
+      playerId: wr.id,
       name: wr.name,
       position: 'WR',
       number: wr.number,
@@ -170,6 +173,7 @@ async function fetchTeamRoster(teamCode) {
   for (const te of tes) {
     const statsData = await fetchRealPlayerStats(te.name, 'TE', teamCode);
     roster.tightEnds.push({
+      playerId: te.id,
       name: te.name,
       position: 'TE',
       number: te.number,

@@ -21,7 +21,7 @@ const nbaTeamIds = {
   'UTA': '1610612762', 'WAS': '1610612764'
 };
 
-// Fetch NBA team stats from ESPN scoreboard (has real current season stats)
+// Fetch NBA player stats from stats.nba.com API (real current season stats)
 async function getNBAPlayerStats() {
   const now = Date.now();
   
@@ -32,64 +32,85 @@ async function getNBAPlayerStats() {
   }
   
   try {
-    console.log('🏀 Fetching NBA stats from ESPN scoreboard...');
+    console.log('🏀 Fetching NBA stats from stats.nba.com...');
     
-    // Fetch current scoreboard to get real team stats
-    const response = await axios.get('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard', {
-      timeout: 5000
+    const response = await axios.get('https://stats.nba.com/stats/leagueleaders', {
+      params: {
+        Season: '2024-25',
+        SeasonType: 'Regular Season',
+        PerMode: 'PerGame',
+        StatCategory: 'PTS'
+      },
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Accept': 'application/json, text/plain, */*',
+        'Referer': 'https://www.nba.com/',
+        'x-nba-stats-origin': 'stats',
+        'x-nba-stats-token': 'true'
+      },
+      timeout: 10000
     });
     
     const playerStats = {};
+    const data = response.data.resultSet;
+    const headers = data.headers;
     
-    if (response.data && response.data.events) {
-      // Extract all teams from current/recent games to get their stats
-      for (const event of response.data.events) {
-        if (!event.competitions || !event.competitions[0]) continue;
-        
-        for (const competitor of event.competitions[0].competitors) {
-          const teamAbbr = competitor.team.abbreviation;
-          
-          // Create a fake "team player" entry with aggregated stats
-          // This allows the rest of the code to work without changes
-          const key = `${competitor.team.displayName}|${teamAbbr}`;
-          
-          const stats = competitor.statistics || [];
-          const getStat = (name) => {
-            const stat = stats.find(s => s.name === name);
-            return stat ? parseFloat(stat.displayValue) : 0;
-          };
-          
-          playerStats[key] = {
-            playerId: competitor.team.id,
-            name: competitor.team.displayName,
-            team: teamAbbr,
-            position: 'TEAM',
-            gamesPlayed: 20,
-            points: getStat('avgPoints') || 110,
-            rebounds: getStat('avgRebounds') || 45,
-            assists: getStat('avgAssists') || 25,
-            steals: 8,
-            blocks: 5,
-            turnovers: 14,
-            fgPct: getStat('fieldGoalPct') / 100 || 0.46,
-            fg3Pct: getStat('threePointFieldGoalPct') / 100 || 0.36,
-            ftPct: getStat('freeThrowPct') / 100 || 0.78,
-            fgMade: getStat('fieldGoalsMade') || 0,
-            fgAttempts: getStat('fieldGoalsAttempted') || 0,
-            fg3Made: getStat('threePointFieldGoalsMade') || 0,
-            fg3Attempts: getStat('threePointFieldGoalsAttempted') || 0,
-            ftMade: getStat('freeThrowsMade') || 0,
-            ftAttempts: getStat('freeThrowsAttempted') || 0,
-            minutes: 240,
-            plusMinus: 0
-          };
-        }
-      }
+    // Map header names to indices
+    const getIdx = (name) => headers.indexOf(name);
+    const playerIdIdx = getIdx('PLAYER_ID');
+    const playerNameIdx = getIdx('PLAYER');
+    const teamIdx = getIdx('TEAM');
+    const gpIdx = getIdx('GP');
+    const minIdx = getIdx('MIN');
+    const fgmIdx = getIdx('FGM');
+    const fgaIdx = getIdx('FGA');
+    const fgPctIdx = getIdx('FG_PCT');
+    const fg3mIdx = getIdx('FG3M');
+    const fg3aIdx = getIdx('FG3A');
+    const fg3PctIdx = getIdx('FG3_PCT');
+    const ftmIdx = getIdx('FTM');
+    const ftaIdx = getIdx('FTA');
+    const ftPctIdx = getIdx('FT_PCT');
+    const rebIdx = getIdx('REB');
+    const astIdx = getIdx('AST');
+    const stlIdx = getIdx('STL');
+    const blkIdx = getIdx('BLK');
+    const tovIdx = getIdx('TOV');
+    const ptsIdx = getIdx('PTS');
+    
+    // Process each player
+    for (const player of data.rowSet) {
+      const key = `${player[playerNameIdx]}|${player[teamIdx]}`;
+      
+      playerStats[key] = {
+        playerId: player[playerIdIdx],
+        name: player[playerNameIdx],
+        team: player[teamIdx],
+        position: 'G', // API doesn't return position in this endpoint
+        gamesPlayed: player[gpIdx] || 0,
+        points: player[ptsIdx] || 0,
+        rebounds: player[rebIdx] || 0,
+        assists: player[astIdx] || 0,
+        steals: player[stlIdx] || 0,
+        blocks: player[blkIdx] || 0,
+        turnovers: player[tovIdx] || 0,
+        fgPct: player[fgPctIdx] || 0,
+        fg3Pct: player[fg3PctIdx] || 0,
+        ftPct: player[ftPctIdx] || 0,
+        fgMade: player[fgmIdx] || 0,
+        fgAttempts: player[fgaIdx] || 0,
+        fg3Made: player[fg3mIdx] || 0,
+        fg3Attempts: player[fg3aIdx] || 0,
+        ftMade: player[ftmIdx] || 0,
+        ftAttempts: player[ftaIdx] || 0,
+        minutes: player[minIdx] || 0,
+        plusMinus: 0
+      };
     }
     
     nbaPlayerStatsCache = playerStats;
     nbaPlayerStatsCacheTime = now;
-    console.log(`✅ NBA stats loaded from ESPN (${Object.keys(playerStats).length} teams with real stats)`);
+    console.log(`✅ NBA stats loaded (${Object.keys(playerStats).length} players with real 2024-25 season stats)`);
     return playerStats;
     
   } catch (error) {
@@ -212,83 +233,33 @@ async function getNBAInjuries() {
   }
 }
 
-// Fetch individual player stats from ESPN (separate from team stats)
-async function getIndividualPlayerStats(teamCode) {
-  try {
-    const espnId = espnNBATeamIds[teamCode];
-    if (!espnId) return [];
-    
-    // Use ESPN's team page which has player stats
-    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${espnId}`;
-    const response = await axios.get(url, { timeout: 5000 });
-    
-    const players = [];
-    
-    if (response.data && response.data.team && response.data.team.athletes) {
-      for (const athlete of response.data.team.athletes) {
-        // Get season stats if available
-        const stats = athlete.statistics && athlete.statistics.length > 0 
-          ? athlete.statistics.find(s => s.name === 'seasonStats' || s.displayName === 'season')
-          : null;
-        
-        if (stats && stats.stats) {
-          players.push({
-            playerId: athlete.id,
-            name: athlete.displayName || athlete.fullName,
-            team: teamCode,
-            position: athlete.position?.abbreviation || 'G',
-            gamesPlayed: parseInt(stats.stats.gamesPlayed) || 0,
-            points: parseFloat(stats.stats.avgPoints) || parseFloat(stats.stats.points) || 0,
-            rebounds: parseFloat(stats.stats.avgRebounds) || parseFloat(stats.stats.rebounds) || 0,
-            assists: parseFloat(stats.stats.avgAssists) || parseFloat(stats.stats.assists) || 0,
-            steals: parseFloat(stats.stats.avgSteals) || parseFloat(stats.stats.steals) || 0,
-            blocks: parseFloat(stats.stats.avgBlocks) || parseFloat(stats.stats.blocks) || 0,
-            turnovers: parseFloat(stats.stats.avgTurnovers) || parseFloat(stats.stats.turnovers) || 0,
-            fgPct: parseFloat(stats.stats.fieldGoalPct) / 100 || 0.45,
-            fg3Pct: parseFloat(stats.stats.threePointFieldGoalPct) / 100 || 0.35,
-            ftPct: parseFloat(stats.stats.freeThrowPct) / 100 || 0.75,
-            fgMade: parseFloat(stats.stats.avgFieldGoalsMade) || 0,
-            fgAttempts: parseFloat(stats.stats.avgFieldGoalsAttempted) || 0,
-            fg3Made: parseFloat(stats.stats.avgThreePointFieldGoalsMade) || 0,
-            fg3Attempts: parseFloat(stats.stats.avgThreePointFieldGoalsAttempted) || 0,
-            ftMade: parseFloat(stats.stats.avgFreeThrowsMade) || 0,
-            ftAttempts: parseFloat(stats.stats.avgFreeThrowsAttempted) || 0,
-            minutes: parseFloat(stats.stats.avgMinutes) || 0
-          });
-        }
-      }
-    }
-    
-    return players;
-  } catch (error) {
-    console.warn(`⚠️  Could not fetch individual players for ${teamCode}:`, error.message);
-    return [];
-  }
-}
-
 // Get active players for a team (filtered by injuries and minutes played)
-async function getActiveNBAPlayers(teamCode, minGames = 5, minMinutes = 10) {
-  const allPlayers = await getIndividualPlayerStats(teamCode);
+async function getActiveNBAPlayers(teamCode, minGames = 5, minMinutes = 15) {
+  const allPlayerStats = await getNBAPlayerStats();
   const injuries = await getNBAInjuries();
   
-  // Filter players by active status and minimum playing time
-  const activePlayers = allPlayers
+  // Filter players by team and active status
+  const teamPlayers = Object.entries(allPlayerStats)
+    .map(([key, player]) => player)
     .filter(player => {
+      // Match by team code
+      if (player.team !== teamCode) return false;
+      
       const key = `${player.name}|${player.team}`;
       
       // Filter out injured/doubtful players
       if (injuries.has(key)) return false;
       
-      // Filter out players with minimal playing time (likely inactive)
+      // Filter out players with minimal playing time (likely inactive/bench)
       if (player.gamesPlayed < minGames) return false;
       if (player.minutes < minMinutes) return false;
       
       return true;
     })
-    .sort((a, b) => b.points - a.points)
-    .slice(0, 8);
+    .sort((a, b) => b.points - a.points) // Sort by PPG descending
+    .slice(0, 8); // Top 8 scorers
   
-  return activePlayers;
+  return teamPlayers;
 }
 
 // Generate game-specific projected stats for NBA player

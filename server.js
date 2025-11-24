@@ -5,7 +5,7 @@ const axios = require('axios');
 const nflRealPlayers = require('./realPlayers');
 const { scrapeNFLInjuries, isPlayerOut } = require('./injuryScraper');
 const { nbaTeams, espnNBATeamIds } = require('./nba-data');
-const { getNBAPlayerStats, getNBATeamStats } = require('./nba-stats');
+const { getNBAPlayerStats, getNBATeamStats, getNBAInjuries, getActiveNBAPlayers, generateNBAProjection } = require('./nba-stats');
 
 // Use PostgreSQL on Vercel, SQLite locally
 const db = process.env.POSTGRES_URL 
@@ -34,7 +34,17 @@ async function getInjuryData() {
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+
+// Serve static files with no-cache headers to prevent caching issues
+app.use(express.static('public', {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js') || path.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
 
 // NFL Teams data with stadium locations
 const nflTeams = {
@@ -1217,12 +1227,12 @@ async function calculateNBAWinProbability(team1Code, team2Code, isTeam1Home) {
   team1Prob = Math.max(15, Math.min(85, team1Prob));
   const team2Prob = 100 - team1Prob;
   
-  // Predict scores based on averages and pace
-  const projectedPace = avgPace;
-  const paceMultiplier = projectedPace / 100;
+  // Predict scores - use team averages with slight adjustments based on probability
+  const team1Advantage = (team1Prob - 50) / 100; // Range: -0.35 to +0.35
+  const team2Advantage = (team2Prob - 50) / 100;
   
-  const team1ProjScore = Math.round(parseFloat(team1Stats.pointsPerGame) * paceMultiplier * (team1Prob / 50));
-  const team2ProjScore = Math.round(parseFloat(team2Stats.pointsPerGame) * paceMultiplier * (team2Prob / 50));
+  const team1ProjScore = Math.round(parseFloat(team1Stats.pointsPerGame) * (1 + team1Advantage * 0.3));
+  const team2ProjScore = Math.round(parseFloat(team2Stats.pointsPerGame) * (1 + team2Advantage * 0.3));
   
   // Confidence level
   const probDiff = Math.abs(team1Prob - team2Prob);
@@ -1252,16 +1262,53 @@ async function calculateNBAWinProbability(team1Code, team2Code, isTeam1Home) {
     factors.push(`${nbaTeams[team1Code].name} playing at home court`);
   }
   
+  // Get active players for each team (filters out injured and inactive players)
+  const team1Players = await getActiveNBAPlayers(team1Code);
+  const team2Players = await getActiveNBAPlayers(team2Code);
+  
+  // Generate projected stats for each player
+  const { generateNBAProjection } = require('./nba-stats');
+  const team1PlayersWithProjections = team1Players.map(player => ({
+    ...player,
+    projected: generateNBAProjection(player, team2Stats, isTeam1Home)
+  }));
+  const team2PlayersWithProjections = team2Players.map(player => ({
+    ...player,
+    projected: generateNBAProjection(player, team1Stats, !isTeam1Home)
+  }));
+  
+  // Get injury information
+  const injuries = await getNBAInjuries();
+  const allPlayerStats = await getNBAPlayerStats();
+  
+  // Count injured players for each team
+  const team1Injured = Object.keys(allPlayerStats)
+    .filter(key => key.endsWith(`|${team1Code}`) && injuries.has(key))
+    .map(key => allPlayerStats[key].name);
+  const team2Injured = Object.keys(allPlayerStats)
+    .filter(key => key.endsWith(`|${team2Code}`) && injuries.has(key))
+    .map(key => allPlayerStats[key].name);
+  
   return {
-    team1: nbaTeams[team1Code].name,
-    team2: nbaTeams[team2Code].name,
-    team1Code,
-    team2Code,
-    team1Probability: parseFloat(team1Prob.toFixed(1)),
-    team2Probability: parseFloat(team2Prob.toFixed(1)),
-    predictedScore: {
-      team1: team1ProjScore,
-      team2: team2ProjScore
+    team1: {
+      name: nbaTeams[team1Code].name,
+      code: team1Code,
+      probability: parseFloat(team1Prob.toFixed(1)),
+      predictedScore: team1ProjScore,
+      roster: {
+        topPlayers: team1PlayersWithProjections
+      },
+      injuredPlayers: team1Injured
+    },
+    team2: {
+      name: nbaTeams[team2Code].name,
+      code: team2Code,
+      probability: parseFloat(team2Prob.toFixed(1)),
+      predictedScore: team2ProjScore,
+      roster: {
+        topPlayers: team2PlayersWithProjections
+      },
+      injuredPlayers: team2Injured
     },
     confidence: confidence,
     keyFactors: factors,
@@ -1497,9 +1544,21 @@ app.get('/api/nba/games-with-predictions', async (req, res) => {
               true
             ),
             new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Prediction timeout')), 8000)
+              setTimeout(() => reject(new Error('Prediction timeout')), 15000)
             )
           ]);
+          
+          // Auto-save prediction to database
+          if (db.savePrediction) {
+            try {
+              db.savePrediction(prediction, game.id, dateStr);
+            } catch (err) {
+              // Silently ignore duplicate errors
+              if (!err.message.includes('UNIQUE constraint')) {
+                console.warn('Failed to save NBA prediction:', err.message);
+              }
+            }
+          }
           
           return {
             ...game,
@@ -1513,7 +1572,60 @@ app.get('/api/nba/games-with-predictions', async (req, res) => {
     );
     
     console.log(`✓ Generated ${gamesWithPredictions.length} NBA predictions`);
-    res.json({ date: dateStr, games: gamesWithPredictions });
+    console.log('📤 Sending NBA response to client...');
+    
+    // Send response with error handling - clean up the response data
+    try {
+      // Create clean response without circular references
+      const cleanGames = gamesWithPredictions.map(game => {
+        const cleanGame = {
+          id: game.id,
+          name: game.name,
+          shortName: game.shortName,
+          date: game.date,
+          status: game.status,
+          homeTeam: {
+            code: game.homeTeam.code,
+            name: game.homeTeam.name,
+            abbreviation: game.homeTeam.abbreviation,
+            score: game.homeTeam.score,
+            record: game.homeTeam.record,
+            logo: game.homeTeam.logo
+          },
+          awayTeam: {
+            code: game.awayTeam.code,
+            name: game.awayTeam.name,
+            abbreviation: game.awayTeam.abbreviation,
+            score: game.awayTeam.score,
+            record: game.awayTeam.record,
+            logo: game.awayTeam.logo
+          },
+          venue: game.venue,
+          broadcast: game.broadcast
+        };
+        
+        // Add prediction if it exists
+        if (game.prediction) {
+          cleanGame.prediction = {
+            team1: game.prediction.team1,
+            team2: game.prediction.team2,
+            confidence: game.prediction.confidence,
+            keyFactors: game.prediction.keyFactors
+          };
+        }
+        
+        return cleanGame;
+      });
+      
+      const responseData = { date: dateStr, games: cleanGames };
+      console.log(`Response contains ${responseData.games.length} games`);
+      res.json(responseData);
+      console.log('✅ NBA response sent successfully');
+    } catch (jsonError) {
+      console.error('❌ JSON serialization error:', jsonError.message);
+      console.error(jsonError.stack);
+      res.status(500).json({ error: 'Failed to serialize response', message: jsonError.message });
+    }
   } catch (error) {
     console.error('Error in /api/nba/games-with-predictions:', error);
     res.status(500).json({ error: 'Failed to fetch NBA games with predictions', message: error.message });
@@ -1551,9 +1663,11 @@ app.get('/api/games-with-predictions', async (req, res) => {
           
           // Save prediction to database (don't await to avoid blocking)
           if (db.savePrediction) {
-            db.savePrediction(prediction, game.id, dateStr).catch(err => 
-              console.warn('Failed to save prediction:', err.message)
-            );
+            try {
+              db.savePrediction(prediction, game.id, dateStr);
+            } catch (err) {
+              console.warn('Failed to save prediction:', err.message);
+            }
           }
           
           return {
@@ -2440,66 +2554,80 @@ app.get('/api/nba/same-game-parlay', async (req, res) => {
     // HOME TEAM PROPS
     // Top 3 scorers
     const homeScorers = homePlayers.filter(p => p.points > 10).sort((a, b) => b.points - a.points).slice(0, 3);
+    console.log(`✓ Found ${homeScorers.length} home scorers for ${homeTeam}`);
     for (const player of homeScorers) {
-      // Points
-      const pointsLine = Math.round(player.points - 0.5);
+      // Generate game-specific projection using the same function as game predictions
+      const projection = generateNBAProjection(player, awayStats, true);
+      console.log(`  ✓ Projected ${player.name}: ${projection.points.toFixed(1)} pts (season: ${player.points})`);
+      
+      // Points - projected for this matchup
+      const projectedPoints = projection.points;
+      // Set line at projection, rounding creates natural variance
+      const pointsLine = Math.round(projectedPoints - 0.5);
       props.push({
         playerId: player.playerId,
         player: player.name,
         team: homeTeam,
         prop: 'Points',
-        line: player.points,
+        line: projectedPoints,
         over: pointsLine,
         under: pointsLine,
-        recommendation: player.points > pointsLine + 2 ? 'OVER' : player.points < pointsLine - 2 ? 'UNDER' : 'PASS',
-        confidence: getConfidence(player.points)
+        recommendation: projectedPoints > pointsLine + 0.2 ? 'OVER' : projectedPoints < pointsLine - 0.2 ? 'UNDER' : 'PASS',
+        confidence: getConfidence(projectedPoints),
+        seasonAvg: player.points
       });
       
       // Rebounds (if player gets 5+)
       if (player.rebounds >= 5) {
-        const rebLine = Math.round(player.rebounds - 0.5);
+        const projectedReb = projection.rebounds;
+        const rebLine = Math.round(projectedReb - 0.5);
         props.push({
           playerId: player.playerId,
           player: player.name,
           team: homeTeam,
           prop: 'Rebounds',
-          line: player.rebounds,
+          line: projectedReb,
           over: rebLine,
           under: rebLine,
-          recommendation: player.rebounds > rebLine + 1 ? 'OVER' : player.rebounds < rebLine - 1 ? 'UNDER' : 'PASS',
-          confidence: player.rebounds > 8 ? 'High' : player.rebounds > 5 ? 'Medium' : 'Low'
+          recommendation: projectedReb > rebLine + 0.2 ? 'OVER' : projectedReb < rebLine - 0.2 ? 'UNDER' : 'PASS',
+          confidence: projectedReb > 8 ? 'High' : projectedReb > 5 ? 'Medium' : 'Low',
+          seasonAvg: player.rebounds
         });
       }
       
       // Assists (if player gets 4+)
       if (player.assists >= 4) {
-        const astLine = Math.round(player.assists - 0.5);
+        const projectedAst = projection.assists;
+        const astLine = Math.round(projectedAst - 0.5);
         props.push({
           playerId: player.playerId,
           player: player.name,
           team: homeTeam,
           prop: 'Assists',
-          line: player.assists,
+          line: projectedAst,
           over: astLine,
           under: astLine,
-          recommendation: player.assists > astLine + 1 ? 'OVER' : player.assists < astLine - 1 ? 'UNDER' : 'PASS',
-          confidence: player.assists > 7 ? 'High' : player.assists > 4 ? 'Medium' : 'Low'
+          recommendation: projectedAst > astLine + 0.2 ? 'OVER' : projectedAst < astLine - 0.2 ? 'UNDER' : 'PASS',
+          confidence: projectedAst > 7 ? 'High' : projectedAst > 4 ? 'Medium' : 'Low',
+          seasonAvg: player.assists
         });
       }
       
       // 3-Pointers Made (if player hits 2+)
       if (player.fg3Made >= 2) {
-        const threesPtLine = (player.fg3Made - 0.5).toFixed(1);
+        const projected3PM = projection.threes;
+        const threesPtLine = (projected3PM - 0.5).toFixed(1);
         props.push({
           playerId: player.playerId,
           player: player.name,
           team: homeTeam,
           prop: '3-Pointers Made',
-          line: player.fg3Made,
+          line: projected3PM,
           over: threesPtLine,
           under: threesPtLine,
-          recommendation: player.fg3Made > parseFloat(threesPtLine) + 0.3 ? 'OVER' : player.fg3Made < parseFloat(threesPtLine) - 0.3 ? 'UNDER' : 'PASS',
-          confidence: player.fg3Made > 3 ? 'High' : player.fg3Made > 2 ? 'Medium' : 'Low'
+          recommendation: projected3PM > parseFloat(threesPtLine) + 0.2 ? 'OVER' : projected3PM < parseFloat(threesPtLine) - 0.2 ? 'UNDER' : 'PASS',
+          confidence: projected3PM > 3 ? 'High' : projected3PM > 2 ? 'Medium' : 'Low',
+          seasonAvg: player.fg3Made
         });
       }
     }
@@ -2508,65 +2636,76 @@ app.get('/api/nba/same-game-parlay', async (req, res) => {
     // Top 3 scorers
     const awayScorers = awayPlayers.filter(p => p.points > 10).sort((a, b) => b.points - a.points).slice(0, 3);
     for (const player of awayScorers) {
-      // Points
-      const pointsLine = Math.round(player.points - 0.5);
+      // Generate game-specific projection using the same function as game predictions
+      const projection = generateNBAProjection(player, homeStats, false);
+      
+      // Points - projected for this matchup
+      const projectedPoints = projection.points;
+      const pointsLine = Math.round(projectedPoints - 0.5);
       props.push({
         playerId: player.playerId,
         player: player.name,
         team: awayTeam,
         prop: 'Points',
-        line: player.points,
+        line: projectedPoints,
         over: pointsLine,
         under: pointsLine,
-        recommendation: player.points > pointsLine + 2 ? 'OVER' : player.points < pointsLine - 2 ? 'UNDER' : 'PASS',
-        confidence: getConfidence(player.points)
+        recommendation: projectedPoints > pointsLine + 0.2 ? 'OVER' : projectedPoints < pointsLine - 0.2 ? 'UNDER' : 'PASS',
+        confidence: getConfidence(projectedPoints),
+        seasonAvg: player.points
       });
       
       // Rebounds (if player gets 5+)
       if (player.rebounds >= 5) {
-        const rebLine = Math.round(player.rebounds - 0.5);
+        const projectedReb = projection.rebounds;
+        const rebLine = Math.round(projectedReb - 0.5);
         props.push({
           playerId: player.playerId,
           player: player.name,
           team: awayTeam,
           prop: 'Rebounds',
-          line: player.rebounds,
+          line: projectedReb,
           over: rebLine,
           under: rebLine,
-          recommendation: player.rebounds > rebLine + 1 ? 'OVER' : player.rebounds < rebLine - 1 ? 'UNDER' : 'PASS',
-          confidence: player.rebounds > 8 ? 'High' : player.rebounds > 5 ? 'Medium' : 'Low'
+          recommendation: projectedReb > rebLine + 0.2 ? 'OVER' : projectedReb < rebLine - 0.2 ? 'UNDER' : 'PASS',
+          confidence: projectedReb > 8 ? 'High' : projectedReb > 5 ? 'Medium' : 'Low',
+          seasonAvg: player.rebounds
         });
       }
       
       // Assists (if player gets 4+)
       if (player.assists >= 4) {
-        const astLine = Math.round(player.assists - 0.5);
+        const projectedAst = projection.assists;
+        const astLine = Math.round(projectedAst - 0.5);
         props.push({
           playerId: player.playerId,
           player: player.name,
           team: awayTeam,
           prop: 'Assists',
-          line: player.assists,
+          line: projectedAst,
           over: astLine,
           under: astLine,
-          recommendation: player.assists > astLine + 1 ? 'OVER' : player.assists < astLine - 1 ? 'UNDER' : 'PASS',
-          confidence: player.assists > 7 ? 'High' : player.assists > 4 ? 'Medium' : 'Low'
+          recommendation: projectedAst > astLine + 0.2 ? 'OVER' : projectedAst < astLine - 0.2 ? 'UNDER' : 'PASS',
+          confidence: projectedAst > 7 ? 'High' : projectedAst > 4 ? 'Medium' : 'Low',
+          seasonAvg: player.assists
         });
       }
       
       // 3-Pointers Made (if player hits 2+)
       if (player.fg3Made >= 2) {
-        const threesPtLine = (player.fg3Made - 0.5).toFixed(1);
+        const projected3PM = projection.threes;
+        const threesPtLine = (projected3PM - 0.5).toFixed(1);
         props.push({
           playerId: player.playerId,
           player: player.name,
           team: awayTeam,
           prop: '3-Pointers Made',
-          line: player.fg3Made,
+          line: projected3PM,
           over: threesPtLine,
           under: threesPtLine,
-          recommendation: player.fg3Made > parseFloat(threesPtLine) + 0.3 ? 'OVER' : player.fg3Made < parseFloat(threesPtLine) - 0.3 ? 'UNDER' : 'PASS',
-          confidence: player.fg3Made > 3 ? 'High' : player.fg3Made > 2 ? 'Medium' : 'Low'
+          recommendation: projected3PM > parseFloat(threesPtLine) + 0.2 ? 'OVER' : projected3PM < parseFloat(threesPtLine) - 0.2 ? 'UNDER' : 'PASS',
+          confidence: projected3PM > 3 ? 'High' : projected3PM > 2 ? 'Medium' : 'Low',
+          seasonAvg: player.fg3Made
         });
       }
     }
@@ -2803,45 +2942,360 @@ async function autoUpdatePropResults() {
   }
 }
 
-// Schedule auto-predictions to run once per day at 8 AM
+// Auto-update NBA results from ESPN
+async function autoUpdateNBAResults() {
+  try {
+    console.log('🏀 Auto-updating NBA results from ESPN...');
+    
+    // Get yesterday's and today's games
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const dates = [
+      yesterday.toISOString().split('T')[0],
+      today.toISOString().split('T')[0]
+    ];
+    
+    let totalUpdated = 0;
+    
+    for (const dateStr of dates) {
+      try {
+        const response = await axios.get(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr.replace(/-/g, '')}`);
+        const events = response.data.events;
+        
+        for (const event of events) {
+          if (event.status.type.state === 'post') {
+            const homeTeam = event.competitions[0].competitors.find(t => t.homeAway === 'home');
+            const awayTeam = event.competitions[0].competitors.find(t => t.homeAway === 'away');
+            
+            const saved = db.saveActualResult(
+              event.id,
+              dateStr,
+              homeTeam.team.abbreviation,
+              awayTeam.team.abbreviation,
+              parseInt(homeTeam.score),
+              parseInt(awayTeam.score)
+            );
+            
+            if (saved) totalUpdated++;
+          }
+        }
+      } catch (err) {
+        console.warn(`  ⚠️  Failed to fetch NBA games for ${dateStr}`);
+      }
+    }
+    
+    console.log(`✅ NBA auto-update complete: ${totalUpdated} game results updated`);
+  } catch (error) {
+    console.error('❌ NBA auto-update error:', error.message);
+  }
+}
+
+// Schedule automatic result updates throughout the day
 function scheduleAutoPredictions() {
-  const runDaily = () => {
+  const runUpdates = async () => {
     const now = new Date();
     const hour = now.getHours();
+    const day = now.getDay(); // 0 = Sunday, 6 = Saturday
     
-    // Run at 8 AM
+    // Update NFL results multiple times on game days (Sunday, Monday, Thursday)
+    // NFL games typically end between 4 PM - 11 PM ET
+    if ((day === 0 || day === 1 || day === 4) && (hour >= 16 && hour <= 23)) {
+      console.log('\n🏈 Running NFL result updates...');
+      await autoUpdateResults();
+      await autoUpdatePropResults();
+    }
+    
+    // Update NBA results multiple times daily (NBA games run 7 PM - 1 AM ET)
+    // Check every 2 hours during evening hours
+    if (hour >= 19 || hour <= 2) {
+      console.log('\n🏀 Running NBA result updates...');
+      await autoUpdateNBAResults();
+    }
+    
+    // Morning update at 8 AM - catch any late games and generate new predictions
     if (hour === 8) {
-      autoUpdateResults(); // Update completed game results first
+      console.log('\n☀️ Morning update routine...');
+      await autoUpdateResults();
+      await autoUpdateNBAResults();
+      await autoUpdatePropResults();
       setTimeout(() => {
-        autoUpdatePropResults(); // Then update prop results
+        autoPredictUpcomingGames();
       }, 5000);
-      setTimeout(() => {
-        autoPredictUpcomingGames(); // Then generate new predictions
-      }, 10000); // Wait 10 seconds total
     }
   };
   
-  // Check every hour
-  setInterval(runDaily, 60 * 60 * 1000);
+  // Run every 30 minutes to catch completed games quickly
+  setInterval(runUpdates, 30 * 60 * 1000);
   
-  // Also run on server start if it's between 8 AM and 9 AM
-  const now = new Date();
-  if (now.getHours() === 8) {
-    autoUpdateResults().then(() => {
-      setTimeout(() => {
-        autoUpdatePropResults();
-      }, 5000);
-      setTimeout(() => {
-        autoPredictUpcomingGames();
-      }, 10000);
-    });
-  }
+  // Run immediately on server start
+  console.log('⏰ Auto-update scheduler enabled (runs every 30 minutes)');
+  console.log('   - NFL: Updates on Sun/Mon/Thu from 4 PM - 11 PM ET');
+  console.log('   - NBA: Updates daily from 7 PM - 2 AM ET');
+  console.log('   - Morning: Full update at 8 AM daily');
   
-  console.log('⏰ Auto-prediction scheduler enabled (runs daily at 8 AM)');
-  console.log('   - Updates completed game results');
-  console.log('   - Updates player prop results');
-  console.log('   - Generates predictions for upcoming games');
+  // Initial run after 10 seconds
+  setTimeout(runUpdates, 10000);
 }
+
+// ============================================
+// BATCH PREDICTION & ACCURACY ENDPOINTS
+// ============================================
+
+// Store predictions for all games on a given date (NFL)
+app.post('/api/batch-predict', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    console.log(`\n📊 Batch predicting NFL games for ${date}...`);
+
+    // Get games with predictions
+    const response = await axios.get(`http://localhost:${PORT}/api/games-with-predictions?date=${date}`);
+    const games = response.data.games;
+
+    let saved = 0;
+    let skipped = 0;
+
+    for (const game of games) {
+      if (game.prediction) {
+        try {
+          db.savePrediction(game.prediction, game.id, date);
+          saved++;
+          console.log(`  ✓ ${game.awayTeam.name} @ ${game.homeTeam.name}`);
+        } catch (err) {
+          if (err.message.includes('UNIQUE constraint')) {
+            skipped++;
+          } else {
+            console.error(`  ✗ Error saving ${game.id}:`, err.message);
+          }
+        }
+      }
+    }
+
+    console.log(`\n✅ Batch prediction complete: ${saved} saved, ${skipped} already existed\n`);
+
+    res.json({
+      success: true,
+      date,
+      total: games.length,
+      saved,
+      skipped,
+      message: `Successfully stored ${saved} predictions for ${date}`
+    });
+  } catch (error) {
+    console.error('❌ Batch prediction error:', error);
+    res.status(500).json({ error: 'Failed to store batch predictions' });
+  }
+});
+
+// Store predictions for all NBA games on a given date
+app.post('/api/nba/batch-predict', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    console.log(`\n🏀 Batch predicting NBA games for ${date}...`);
+
+    // Get games with predictions
+    const response = await axios.get(`http://localhost:${PORT}/api/nba/games-with-predictions?date=${date}`);
+    const games = response.data.games;
+
+    let saved = 0;
+    let skipped = 0;
+
+    for (const game of games) {
+      if (game.prediction) {
+        try {
+          db.savePrediction(game.prediction, game.id, date);
+          saved++;
+          console.log(`  ✓ ${game.awayTeam.name} @ ${game.homeTeam.name}`);
+        } catch (err) {
+          if (err.message.includes('UNIQUE constraint')) {
+            skipped++;
+          } else {
+            console.error(`  ✗ Error saving ${game.id}:`, err.message);
+          }
+        }
+      }
+    }
+
+    console.log(`\n✅ NBA batch prediction complete: ${saved} saved, ${skipped} already existed\n`);
+
+    res.json({
+      success: true,
+      date,
+      total: games.length,
+      saved,
+      skipped,
+      message: `Successfully stored ${saved} NBA predictions for ${date}`
+    });
+  } catch (error) {
+    console.error('❌ NBA batch prediction error:', error);
+    res.status(500).json({ error: 'Failed to store NBA batch predictions' });
+  }
+});
+
+// Update actual results from ESPN (NFL)
+app.post('/api/update-results', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    console.log(`\n📈 Fetching actual results for ${date}...`);
+
+    const response = await axios.get(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${date.replace(/-/g, '')}`);
+    const events = response.data.events;
+
+    let updated = 0;
+    let pending = 0;
+
+    for (const event of events) {
+      const gameId = event.id;
+      const status = event.status.type.state;
+      
+      // Only process completed games
+      if (status === 'post') {
+        const homeTeam = event.competitions[0].competitors.find(t => t.homeAway === 'home');
+        const awayTeam = event.competitions[0].competitors.find(t => t.homeAway === 'away');
+        
+        const homeScore = parseInt(homeTeam.score);
+        const awayScore = parseInt(awayTeam.score);
+
+        try {
+          db.saveActualResult(
+            gameId,
+            date,
+            homeTeam.team.abbreviation,
+            awayTeam.team.abbreviation,
+            homeScore,
+            awayScore
+          );
+          updated++;
+          console.log(`  ✓ ${awayTeam.team.abbreviation} ${awayScore} @ ${homeTeam.team.abbreviation} ${homeScore}`);
+        } catch (err) {
+          console.error(`  ✗ Error saving result for ${gameId}:`, err.message);
+        }
+      } else {
+        pending++;
+      }
+    }
+
+    console.log(`\n✅ Results update complete: ${updated} updated, ${pending} still pending\n`);
+
+    res.json({
+      success: true,
+      date,
+      updated,
+      pending,
+      message: `Updated ${updated} game results for ${date}`
+    });
+  } catch (error) {
+    console.error('❌ Results update error:', error);
+    res.status(500).json({ error: 'Failed to update results' });
+  }
+});
+
+// Update actual results from ESPN (NBA)
+app.post('/api/nba/update-results', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    console.log(`\n🏀 Fetching NBA actual results for ${date}...`);
+
+    const response = await axios.get(`https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${date.replace(/-/g, '')}`);
+    const events = response.data.events;
+
+    let updated = 0;
+    let pending = 0;
+
+    for (const event of events) {
+      const gameId = event.id;
+      const status = event.status.type.state;
+      
+      // Only process completed games
+      if (status === 'post') {
+        const homeTeam = event.competitions[0].competitors.find(t => t.homeAway === 'home');
+        const awayTeam = event.competitions[0].competitors.find(t => t.homeAway === 'away');
+        
+        const homeScore = parseInt(homeTeam.score);
+        const awayScore = parseInt(awayTeam.score);
+
+        try {
+          db.saveActualResult(
+            gameId,
+            date,
+            homeTeam.team.abbreviation,
+            awayTeam.team.abbreviation,
+            homeScore,
+            awayScore
+          );
+          updated++;
+          console.log(`  ✓ ${awayTeam.team.abbreviation} ${awayScore} @ ${homeTeam.team.abbreviation} ${homeScore}`);
+        } catch (err) {
+          console.error(`  ✗ Error saving NBA result for ${gameId}:`, err.message);
+        }
+      } else {
+        pending++;
+      }
+    }
+
+    console.log(`\n✅ NBA results update complete: ${updated} updated, ${pending} still pending\n`);
+
+    res.json({
+      success: true,
+      date,
+      updated,
+      pending,
+      message: `Updated ${updated} NBA game results for ${date}`
+    });
+  } catch (error) {
+    console.error('❌ NBA results update error:', error);
+    res.status(500).json({ error: 'Failed to update NBA results' });
+  }
+});
+
+// Get accuracy report
+app.get('/api/accuracy', async (req, res) => {
+  try {
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+
+    const accuracy = db.calculateAccuracy();
+    const historical = db.getHistoricalAccuracy(startDate, endDate);
+    const pending = db.getPendingPredictions();
+
+    // Calculate detailed stats
+    const byDate = {};
+    historical.forEach(pred => {
+      if (!byDate[pred.game_date]) {
+        byDate[pred.game_date] = { correct: 0, total: 0, games: [] };
+      }
+      byDate[pred.game_date].total++;
+      if (pred.prediction_correct) {
+        byDate[pred.game_date].correct++;
+      }
+      byDate[pred.game_date].games.push({
+        awayTeam: pred.away_team,
+        homeTeam: pred.home_team,
+        predicted: `${pred.away_team} ${pred.predicted_away_score} @ ${pred.home_team} ${pred.predicted_home_score}`,
+        actual: `${pred.away_team} ${pred.actual_away_score} @ ${pred.home_team} ${pred.actual_home_score}`,
+        correct: pred.prediction_correct === 1,
+        confidence: pred.confidence
+      });
+    });
+
+    res.json({
+      overall: accuracy,
+      pending: pending.length,
+      historical: historical.length,
+      byDate: Object.entries(byDate).map(([date, stats]) => ({
+        date,
+        accuracy: stats.total > 0 ? ((stats.correct / stats.total) * 100).toFixed(1) + '%' : 'N/A',
+        correct: stats.correct,
+        total: stats.total,
+        games: stats.games
+      })).sort((a, b) => b.date.localeCompare(a.date))
+    });
+  } catch (error) {
+    console.error('❌ Accuracy report error:', error);
+    res.status(500).json({ error: 'Failed to generate accuracy report' });
+  }
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -2870,6 +3324,20 @@ async function startServer() {
       console.log('🗄️  Using SQLite database');
       db.initDatabase();
     }
+    
+    // Pre-load NBA player stats and injuries on startup
+    console.log('🏀 Pre-loading NBA player stats...');
+    getNBAPlayerStats().then(() => {
+      console.log('✅ NBA player stats loaded and cached');
+    }).catch(err => {
+      console.warn('⚠️  NBA stats pre-load failed, will load on demand');
+    });
+    
+    getNBAInjuries().then(() => {
+      console.log('✅ NBA injury data loaded');
+    }).catch(err => {
+      console.warn('⚠️  NBA injury data load failed');
+    });
     
     app.listen(PORT, () => {
       console.log(`🚀 NFL Prediction Server running on http://localhost:${PORT}`);

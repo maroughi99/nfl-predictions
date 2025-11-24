@@ -74,7 +74,7 @@ body::before {
 .sport-btn {
     flex: 1;
     max-width: 200px;
-    padding: 1rem 2rem;
+    padding: 1.25rem 2rem;
     background: var(--bg-secondary);
     border: 2px solid var(--border-color);
     border-radius: 12px;
@@ -89,10 +89,29 @@ body::before {
     gap: 0.75rem;
 }
 
+.sport-btn .sport-logo {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    transition: all 0.3s ease;
+    filter: brightness(0.8);
+}
+
+.sport-btn .sport-label {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
 .sport-btn:hover {
     background: var(--bg-primary);
     border-color: var(--accent-blue);
     transform: translateY(-2px);
+}
+
+.sport-btn:hover .sport-logo {
+    transform: scale(1.1);
+    filter: brightness(1);
 }
 
 .sport-btn.active {
@@ -102,9 +121,9 @@ body::before {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
-.sport-btn svg {
-    width: 24px;
-    height: 24px;
+.sport-btn.active .sport-logo {
+    transform: scale(1.1);
+    filter: brightness(1.2) drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
 .header-content {
@@ -932,6 +951,18 @@ body::before {
     border-bottom: 2px solid var(--border-color);
 }
 
+.injury-notice {
+    background: rgba(255, 107, 107, 0.15);
+    border-left: 3px solid var(--accent-red);
+    padding: 0.8rem 1rem;
+    margin-top: 0.8rem;
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #ffb3b3;
+    font-weight: 500;
+}
+
 .players-grid {
     display: grid;
     gap: 1rem;
@@ -1406,9 +1437,31 @@ body::before {
 }
 
 .strategy-picks {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
     gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-blue) var(--bg-secondary);
+}
+
+.strategy-picks::-webkit-scrollbar {
+    height: 8px;
+}
+
+.strategy-picks::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.strategy-picks::-webkit-scrollbar-thumb {
+    background: var(--accent-blue);
+    border-radius: 4px;
+}
+
+.strategy-picks::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-purple);
 }
 
 .prop-card {
@@ -1417,6 +1470,8 @@ body::before {
     border-radius: 12px;
     padding: 1.5rem;
     transition: all 0.3s;
+    min-width: 280px;
+    flex-shrink: 0;
 }
 
 .prop-card.suggested {
@@ -1574,51 +1629,103 @@ body::before {
 
 @media (max-width: 768px) {
     .container {
-        padding: 0.75rem;
+        padding: 0.5rem;
     }
 
     .header {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
         padding: 1rem 0;
     }
 
     .logo {
-        flex-direction: column;
-        gap: 0.5rem;
+        flex-direction: row;
+        gap: 0.75rem;
+        justify-content: center;
+        align-items: center;
     }
 
     .logo svg {
-        width: 32px;
-        height: 32px;
+        width: 28px;
+        height: 28px;
     }
 
     .logo h1 {
-        font-size: 1.5rem;
-        text-align: center;
+        font-size: 1.2rem;
+        text-align: left;
         line-height: 1.2;
     }
 
     .header-subtitle {
         flex-direction: column;
         gap: 0.5rem;
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         text-align: center;
+        flex-wrap: wrap;
+    }
+
+    .header-subtitle a {
+        font-size: 0.8rem !important;
+        padding: 6px 12px !important;
+        margin-left: 0 !important;
     }
 
     .ai-badge {
-        font-size: 0.65rem;
-        padding: 0.25rem 0.6rem;
+        font-size: 0.6rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    /* Sport selector mobile */
+    .sport-selector {
+        gap: 0.5rem;
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .sport-btn {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+
+    .sport-btn .sport-logo {
+        width: 28px;
+        height: 28px;
+    }
+
+    .sport-btn .sport-label {
+        font-size: 0.85rem;
+    }
+
+    /* Tab navigation mobile */
+    .tab-navigation {
+        gap: 0.5rem;
+        padding: 0.4rem;
+        margin-bottom: 1rem;
+    }
+
+    .tab-btn {
+        padding: 0.75rem 0.5rem;
+        font-size: 0.85rem;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .tab-btn svg {
+        width: 16px;
+        height: 16px;
     }
 
     .team-selector {
         grid-template-columns: 1fr;
-        gap: 1.5rem;
+        gap: 1rem;
     }
 
     .vs-divider {
-        width: 50px;
-        height: 50px;
+        width: 40px;
+        height: 40px;
         margin: 0 auto;
+        font-size: 0.9rem;
     }
 
     .stat-row {
@@ -1633,18 +1740,164 @@ body::before {
     .team1-stat,
     .team2-stat {
         text-align: left;
+        font-size: 0.9rem;
     }
 
     .games-grid {
         grid-template-columns: 1fr;
+        gap: 1rem;
     }
 
-    .probability-value {
-        font-size: 2.5rem;
+    .game-card {
+        padding: 1rem;
+    }
+
+    .game-header h3 {
+        font-size: 1rem;
+    }
+
+    .game-time {
+        font-size: 0.8rem;
+    }
+
+    .teams-container {
+        gap: 0.75rem;
+    }
+
+    .team {
+        gap: 0.75rem;
+    }
+
+    .team-logo {
+        width: 48px;
+        height: 48px;
+    }
+
+    .team-name {
+        font-size: 1.1rem;
+    }
+
+    .team-record {
+        font-size: 0.75rem;
     }
 
     .score {
+        font-size: 1.8rem;
+    }
+
+    .probability-section {
+        padding: 1rem;
+        gap: 1rem;
+    }
+
+    .probability-item {
+        gap: 0.5rem;
+    }
+
+    .probability-label {
+        font-size: 0.85rem;
+    }
+
+    .probability-value {
         font-size: 2rem;
+    }
+
+    .confidence-badge {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.75rem;
+    }
+
+    .key-factors {
+        padding: 1rem;
+    }
+
+    .key-factors h4 {
+        font-size: 0.9rem;
+    }
+
+    .factor-item {
+        font-size: 0.85rem;
+        padding: 0.5rem;
+    }
+
+    /* Parlay generator mobile */
+    .parlay-generator {
+        padding: 1rem;
+    }
+
+    .parlay-header h2 {
+        font-size: 1.2rem;
+    }
+
+    .player-cards-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .player-card {
+        padding: 1rem;
+    }
+
+    .player-info h3 {
+        font-size: 1rem;
+    }
+
+    .player-team {
+        font-size: 0.8rem;
+    }
+
+    .player-stats-grid {
+        gap: 0.5rem;
+    }
+
+    .stat-item {
+        padding: 0.5rem;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+    }
+
+    .stat-value {
+        font-size: 1.1rem;
+    }
+
+    .parlay-strategies {
+        gap: 0.75rem;
+    }
+
+    .strategy-card {
+        padding: 1rem;
+    }
+
+    .strategy-title {
+        font-size: 1rem;
+    }
+
+    .prop-item {
+        padding: 0.6rem;
+        font-size: 0.85rem;
+    }
+
+    /* Live status mobile */
+    .live-status-section {
+        padding: 1rem;
+    }
+
+    .status-badge {
+        padding: 0.5rem 1rem;
+        font-size: 0.85rem;
+    }
+
+    .date-selector {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .date-input {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 0.9rem;
     }
 }
 

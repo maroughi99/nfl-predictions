@@ -415,6 +415,56 @@ function getPendingPropPredictions() {
   return stmt.all();
 }
 
+// Get predictions that don't have results yet
+function getPendingPredictions() {
+  const stmt = db.prepare(`
+    SELECT p.*
+    FROM predictions p
+    LEFT JOIN actual_results r ON p.game_id = r.game_id
+    WHERE r.home_score IS NULL
+    ORDER BY p.game_date DESC
+  `);
+
+  return stmt.all();
+}
+
+// Get all predictions for accuracy analysis with date range
+function getHistoricalAccuracy(startDate = null, endDate = null) {
+  let query = `
+    SELECT 
+      p.*,
+      r.home_score as actual_home_score,
+      r.away_score as actual_away_score,
+      r.winner as actual_winner,
+      CASE 
+        WHEN r.winner IS NOT NULL THEN 
+          CASE WHEN 
+            (p.predicted_home_score > p.predicted_away_score AND r.winner = 'home') OR
+            (p.predicted_away_score > p.predicted_home_score AND r.winner = 'away')
+          THEN 1 ELSE 0 END
+        ELSE NULL
+      END as prediction_correct
+    FROM predictions p
+    LEFT JOIN actual_results r ON p.game_id = r.game_id
+    WHERE r.home_score IS NOT NULL
+  `;
+
+  const params = [];
+  if (startDate) {
+    query += ` AND p.game_date >= ?`;
+    params.push(startDate);
+  }
+  if (endDate) {
+    query += ` AND p.game_date <= ?`;
+    params.push(endDate);
+  }
+
+  query += ` ORDER BY p.game_date DESC`;
+
+  const stmt = db.prepare(query);
+  return stmt.all(...params);
+}
+
 // Initialize on load
 initDatabase();
 
@@ -429,5 +479,7 @@ module.exports = {
   savePropPrediction,
   savePropResult,
   calculatePropAccuracy,
-  getPendingPropPredictions
+  getPendingPropPredictions,
+  getPendingPredictions,
+  getHistoricalAccuracy
 };

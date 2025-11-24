@@ -387,8 +387,59 @@ function displayTodaysGames(games) {
     
     games.forEach(game => {
         const card = createGamePredictionCard(game);
-        container.appendChild(card);
+        if (card) {
+            container.appendChild(card);
+        }
     });
+}
+
+// Create simple game card without prediction (for games where prediction failed)
+function createGameCardWithoutPrediction(game, statusClass, statusIcon, statusText, timeStr) {
+    const card = document.createElement('div');
+    card.className = 'game-prediction-card';
+    
+    card.innerHTML = `
+        <div class="game-header">
+            <div class="game-status ${statusClass}">
+                ${statusIcon} ${statusText}
+            </div>
+            <div class="game-status">
+                ${timeStr} • ${game.broadcast || 'TBD'}
+            </div>
+        </div>
+        
+        <div class="game-matchup-display">
+            <div class="team-display">
+                <img src="${game.awayTeam.logo || `https://a.espncdn.com/i/teamlogos/${currentSport}/500/${game.awayTeam.code}.png`}" 
+                     alt="${game.awayTeam.name}" 
+                     class="team-logo"
+                     onerror="this.style.display='none'">
+                <div class="team-info">
+                    <div class="team-display-name">${game.awayTeam.name}</div>
+                    <div class="team-display-record">Record: ${game.awayTeam.record}</div>
+                </div>
+            </div>
+            
+            <div class="matchup-divider">@</div>
+            
+            <div class="team-display">
+                <img src="${game.homeTeam.logo || `https://a.espncdn.com/i/teamlogos/${currentSport}/500/${game.homeTeam.code}.png`}" 
+                     alt="${game.homeTeam.name}" 
+                     class="team-logo"
+                     onerror="this.style.display='none'">
+                <div class="team-info">
+                    <div class="team-display-name">${game.homeTeam.name}</div>
+                    <div class="team-display-record">Record: ${game.homeTeam.record}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="padding: 15px; text-align: center; color: #888;">
+            <em>Prediction unavailable</em>
+        </div>
+    `;
+    
+    return card;
 }
 
 // Create game prediction card
@@ -411,6 +462,12 @@ function createGamePredictionCard(game) {
         statusClass = 'status-final';
         statusIcon = '✓';
         statusText = 'FINAL';
+    }
+    
+    // Check if prediction exists (might timeout or fail)
+    if (!game.prediction || !game.prediction.team1 || !game.prediction.team2) {
+        console.warn('No prediction data for game:', game.name);
+        return createGameCardWithoutPrediction(game, statusClass, statusIcon, statusText, timeStr);
     }
     
     const homeProb = parseFloat(game.prediction.team1.probability);
@@ -470,10 +527,12 @@ function createGamePredictionCard(game) {
                 <div class="detail-label">Confidence</div>
                 <div class="detail-value">${game.prediction.confidence}</div>
             </div>
+            ${game.prediction.weather ? `
             <div class="game-detail-item">
                 <div class="detail-label">Weather</div>
                 <div class="detail-value">${getWeatherIcon(game.prediction.weather.condition)} ${game.prediction.weather.temperature}°F</div>
             </div>
+            ` : ''}
             <div class="game-detail-item">
                 <div class="detail-label">Venue</div>
                 <div class="detail-value" style="font-size: 0.85rem;">${game.venue}</div>
@@ -528,11 +587,23 @@ function displayPrediction(prediction) {
     confidenceBadge.textContent = `${prediction.confidence} Confidence`;
     confidenceBadge.style.borderColor = getConfidenceColor(prediction.confidence);
     
-    // Weather conditions
-    displayWeather(prediction.weather);
+    // Weather conditions (only for NFL games)
+    if (prediction.weather) {
+        displayWeather(prediction.weather);
+    } else {
+        // Hide weather section for NBA games
+        const weatherInfo = document.getElementById('weatherInfo');
+        if (weatherInfo) weatherInfo.style.display = 'none';
+    }
     
-    // Injury report
-    displayInjuryReport(prediction.team1, prediction.team2);
+    // Injury report (only for NFL games)
+    if (prediction.team1.stats) {
+        displayInjuryReport(prediction.team1, prediction.team2);
+    } else {
+        // Hide injury section for NBA games
+        const injuryInfo = document.getElementById('injuryInfo');
+        if (injuryInfo) injuryInfo.style.display = 'none';
+    }
     
     // Key factors
     const factorsList = document.getElementById('factorsList');
@@ -549,6 +620,14 @@ function displayPrediction(prediction) {
 
 // Display team statistics comparison
 function displayTeamStats(team1, team2) {
+    // Skip for NBA games (no detailed stats object)
+    if (!team1.stats || !team2.stats) {
+        // Hide the stats section for NBA
+        const statsSection = document.querySelector('.team-stats-comparison');
+        if (statsSection) statsSection.style.display = 'none';
+        return;
+    }
+    
     // Record
     document.getElementById('team1Record').textContent = `${team1.stats.wins}-${team1.stats.losses}`;
     document.getElementById('team2Record').textContent = `${team2.stats.wins}-${team2.stats.losses}`;
@@ -729,6 +808,23 @@ function getConfidenceColor(confidence) {
 
 // Setup player prediction tabs
 function setupPlayerTabs(prediction) {
+    // Check if this is NBA (has topPlayers) or NFL (has quarterbacks)
+    if (prediction.team1.roster && prediction.team1.roster.topPlayers) {
+        // NBA mode - display top players
+        const playerTabs = document.querySelector('.player-tabs');
+        if (playerTabs) playerTabs.style.display = 'none'; // Hide position tabs for NBA
+        displayNBAPlayers(prediction);
+        return;
+    } else if (!prediction.team1.roster) {
+        // No roster data at all
+        const playerSection = document.getElementById('playerStatsContent');
+        if (playerSection) playerSection.style.display = 'none';
+        const playerTabs = document.querySelector('.player-tabs');
+        if (playerTabs) playerTabs.style.display = 'none';
+        return;
+    }
+    
+    // NFL mode - use position tabs
     const tabs = document.querySelectorAll('.player-tab');
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -746,6 +842,11 @@ function setupPlayerTabs(prediction) {
 function displayPlayerStats(prediction, position) {
     const content = document.getElementById('playerStatsContent');
     content.innerHTML = '';
+    
+    // Skip for NBA games (no roster data)
+    if (!prediction.team1.roster || !prediction.team2.roster) {
+        return;
+    }
     
     const positionMap = {
         'QB': 'quarterbacks',
@@ -941,6 +1042,121 @@ function createPlayerCard(player, position) {
     return card;
 }
 
+// Display NBA Players
+function displayNBAPlayers(prediction) {
+    const content = document.getElementById('playerStatsContent');
+    content.innerHTML = '';
+    
+    // Team 1 Players
+    const team1Section = document.createElement('div');
+    team1Section.className = 'team-players-section';
+    
+    let team1Header = `<h4 class="team-players-header">${prediction.team1.name} - Top Players</h4>`;
+    if (prediction.team1.injuredPlayers && prediction.team1.injuredPlayers.length > 0) {
+        team1Header += `<div class="injury-notice">⚠️ Out: ${prediction.team1.injuredPlayers.join(', ')}</div>`;
+    }
+    team1Section.innerHTML = team1Header;
+    
+    const team1Grid = document.createElement('div');
+    team1Grid.className = 'players-grid';
+    
+    prediction.team1.roster.topPlayers.forEach(player => {
+        team1Grid.appendChild(createNBAPlayerCard(player));
+    });
+    
+    team1Section.appendChild(team1Grid);
+    content.appendChild(team1Section);
+    
+    // Team 2 Players
+    const team2Section = document.createElement('div');
+    team2Section.className = 'team-players-section';
+    
+    let team2Header = `<h4 class="team-players-header">${prediction.team2.name} - Top Players</h4>`;
+    if (prediction.team2.injuredPlayers && prediction.team2.injuredPlayers.length > 0) {
+        team2Header += `<div class="injury-notice">⚠️ Out: ${prediction.team2.injuredPlayers.join(', ')}</div>`;
+    }
+    team2Section.innerHTML = team2Header;
+    
+    const team2Grid = document.createElement('div');
+    team2Grid.className = 'players-grid';
+    
+    prediction.team2.roster.topPlayers.forEach(player => {
+        team2Grid.appendChild(createNBAPlayerCard(player));
+    });
+    
+    team2Section.appendChild(team2Grid);
+    content.appendChild(team2Section);
+}
+
+// Create NBA player card
+function createNBAPlayerCard(player) {
+    const card = document.createElement('div');
+    card.className = 'player-card';
+    
+    // Check if we have projected stats
+    const hasProjection = player.projected && player.projected.points !== undefined;
+    
+    card.innerHTML = `
+        <div class="player-header">
+            <div class="player-name">${player.name}</div>
+            <div class="player-position">${player.position}</div>
+        </div>
+        <div class="player-stats-row">
+            <div class="player-stat-item">
+                <div class="player-stat-label">Points</div>
+                ${hasProjection ? `
+                    <div class="player-stat-value">${player.projected.points}</div>
+                    <div class="player-stat-value season">Season: ${player.points.toFixed(1)}</div>
+                ` : `
+                    <div class="player-stat-value">${player.points.toFixed(1)}</div>
+                `}
+            </div>
+            <div class="player-stat-item">
+                <div class="player-stat-label">Rebounds</div>
+                ${hasProjection ? `
+                    <div class="player-stat-value">${player.projected.rebounds}</div>
+                    <div class="player-stat-value season">Season: ${player.rebounds.toFixed(1)}</div>
+                ` : `
+                    <div class="player-stat-value">${player.rebounds.toFixed(1)}</div>
+                `}
+            </div>
+            <div class="player-stat-item">
+                <div class="player-stat-label">Assists</div>
+                ${hasProjection ? `
+                    <div class="player-stat-value">${player.projected.assists}</div>
+                    <div class="player-stat-value season">Season: ${player.assists.toFixed(1)}</div>
+                ` : `
+                    <div class="player-stat-value">${player.assists.toFixed(1)}</div>
+                `}
+            </div>
+            <div class="player-stat-item">
+                <div class="player-stat-label">3-Pointers</div>
+                ${hasProjection ? `
+                    <div class="player-stat-value">${player.projected.threes}</div>
+                    <div class="player-stat-value season">Season: ${player.fg3Made.toFixed(1)}</div>
+                ` : `
+                    <div class="player-stat-value">${player.fg3Made.toFixed(1)}</div>
+                `}
+            </div>
+            <div class="player-stat-item">
+                <div class="player-stat-label">Steals + Blocks</div>
+                ${hasProjection ? `
+                    <div class="player-stat-value">${(player.projected.steals + player.projected.blocks).toFixed(1)}</div>
+                    <div class="player-stat-value season">Season: ${(player.steals + player.blocks).toFixed(1)}</div>
+                ` : `
+                    <div class="player-stat-value">${(player.steals + player.blocks).toFixed(1)}</div>
+                `}
+            </div>
+            <div class="player-stat-item">
+                <div class="player-stat-label">FG%</div>
+                <div class="player-stat-value">${(player.fgPct * 100).toFixed(1)}%</div>
+            </div>
+        </div>
+    `;
+    
+    return card;
+}
+
 // Same Game Parlay Functions
 async function loadParlayGames() {
     try {
@@ -954,7 +1170,7 @@ async function loadParlayGames() {
         
         games.forEach(game => {
             const option = document.createElement('option');
-            option.value = `${game.homeTeam.code}|${game.awayTeam.code}|${game.id}|${dateStr}`;
+            option.value = `${game.homeTeam.code}|${game.awayTeam.code}|${game.id}|${dateStr}|${currentSport}`;
             const gameDate = new Date(game.date).toLocaleString();
             option.textContent = `${game.awayTeam.code} @ ${game.homeTeam.code} (${gameDate})`;
             select.appendChild(option);
@@ -975,7 +1191,7 @@ async function loadParlayGames() {
 
 async function generateParlay() {
     const select = document.getElementById('parlayGameSelect');
-    const [homeTeam, awayTeam, gameId, gameDate] = select.value.split('|');
+    const [homeTeam, awayTeam, gameId, gameDate, sport] = select.value.split('|');
     
     if (!homeTeam || !awayTeam) return;
     
@@ -984,8 +1200,12 @@ async function generateParlay() {
     document.getElementById('parlayResults').style.display = 'none';
     
     try {
-        const response = await fetch(getAPIPath(`same-game-parlay?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}`));
+        const endpoint = 'same-game-parlay';
+        const response = await fetch(getAPIPath(`${endpoint}?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}`));
         const data = await response.json();
+        
+        // Store sport for createPropCard
+        data.sport = sport;
         
         // Display suggested parlays - show all three strategies
         const suggestedList = document.getElementById('suggestedParlayList');
@@ -998,11 +1218,10 @@ async function generateParlay() {
                     <div class="parlay-strategy">
                         <div class="strategy-header">
                             <h3>🛡️ ${data.parlayStrategies.conservative.name}</h3>
-                            <span class="strategy-odds">${data.parlayStrategies.conservative.odds}</span>
                         </div>
                         <p class="strategy-description">${data.parlayStrategies.conservative.description}</p>
                         <div class="strategy-picks">
-                            ${data.parlayStrategies.conservative.picks.map(prop => createPropCard(prop, true)).join('')}
+                            ${data.parlayStrategies.conservative.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
                         </div>
                     </div>
                 `;
@@ -1014,11 +1233,10 @@ async function generateParlay() {
                     <div class="parlay-strategy recommended">
                         <div class="strategy-header">
                             <h3>⚖️ ${data.parlayStrategies.balanced.name} <span class="recommended-badge">RECOMMENDED</span></h3>
-                            <span class="strategy-odds">${data.parlayStrategies.balanced.odds}</span>
                         </div>
                         <p class="strategy-description">${data.parlayStrategies.balanced.description}</p>
                         <div class="strategy-picks">
-                            ${data.parlayStrategies.balanced.picks.map(prop => createPropCard(prop, true)).join('')}
+                            ${data.parlayStrategies.balanced.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
                         </div>
                     </div>
                 `;
@@ -1030,11 +1248,10 @@ async function generateParlay() {
                     <div class="parlay-strategy">
                         <div class="strategy-header">
                             <h3>🔥 ${data.parlayStrategies.aggressive.name}</h3>
-                            <span class="strategy-odds">${data.parlayStrategies.aggressive.odds}</span>
                         </div>
                         <p class="strategy-description">${data.parlayStrategies.aggressive.description}</p>
                         <div class="strategy-picks">
-                            ${data.parlayStrategies.aggressive.picks.map(prop => createPropCard(prop, true)).join('')}
+                            ${data.parlayStrategies.aggressive.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
                         </div>
                     </div>
                 `;
@@ -1046,11 +1263,10 @@ async function generateParlay() {
                     <div class="parlay-strategy risky">
                         <div class="strategy-header">
                             <h3>💎 ${data.parlayStrategies.risky.name} <span class="risky-badge">YOLO</span></h3>
-                            <span class="strategy-odds">${data.parlayStrategies.risky.odds}</span>
                         </div>
                         <p class="strategy-description">${data.parlayStrategies.risky.description}</p>
                         <div class="strategy-picks">
-                            ${data.parlayStrategies.risky.picks.map(prop => createPropCard(prop, true)).join('')}
+                            ${data.parlayStrategies.risky.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
                         </div>
                     </div>
                 `;
@@ -1061,7 +1277,7 @@ async function generateParlay() {
         
         // Display all props
         const allPropsList = document.getElementById('allPropsList');
-        allPropsList.innerHTML = data.allProps.map(prop => createPropCard(prop, false)).join('');
+        allPropsList.innerHTML = data.allProps.map(prop => createPropCard(prop, false, data.sport)).join('');
         
         // Show results
         document.getElementById('parlayLoading').style.display = 'none';
@@ -1074,14 +1290,37 @@ async function generateParlay() {
     }
 }
 
-function createPropCard(prop, isSuggested) {
+function createPropCard(prop, isSuggested, sport = 'nfl') {
     const recClass = prop.recommendation === 'OVER' ? 'rec-over' : 
                      prop.recommendation === 'UNDER' ? 'rec-under' : 'rec-pass';
     
-    // Generate player image URL from Sleeper CDN if playerId is available
-    const playerImageUrl = prop.playerId 
-        ? `https://sleepercdn.com/content/nfl/players/${prop.playerId}.jpg`
-        : `https://sleepercdn.com/images/v2/icons/player_default.webp`;
+    // Generate player image URL based on sport
+    let playerImageUrl;
+    let fallbackImage;
+    
+    if (sport === 'nba') {
+        // NBA players - use CDN with better fallback
+        fallbackImage = 'https://cdn.nba.com/headshots/nba/latest/260x190/fallback.png';
+        playerImageUrl = prop.playerId 
+            ? `https://cdn.nba.com/headshots/nba/latest/1040x760/${prop.playerId}.png`
+            : fallbackImage;
+    } else {
+        // NFL players - use Sleeper CDN
+        playerImageUrl = prop.playerId 
+            ? `https://sleepercdn.com/content/nfl/players/${prop.playerId}.jpg`
+            : `https://sleepercdn.com/images/v2/icons/player_default.webp`;
+        fallbackImage = 'https://sleepercdn.com/images/v2/icons/player_default.webp';
+    }
+    
+    // Determine units based on prop type and sport
+    let units = '';
+    if (sport === 'nba') {
+        // NBA stats typically don't use units
+        units = '';
+    } else {
+        // NFL uses yards
+        units = ' yards';
+    }
     
     return `
         <div class="prop-card ${isSuggested ? 'suggested' : ''} ${recClass}">
@@ -1090,10 +1329,10 @@ function createPropCard(prop, isSuggested) {
                     <img src="${playerImageUrl}" 
                          alt="${prop.player}" 
                          class="player-headshot"
-                         onerror="this.src='https://sleepercdn.com/images/v2/icons/player_default.webp'">
+                         onerror="this.src='${fallbackImage}'">
                     <div class="player-info">
                         <span class="player-name">${prop.player}</span>
-                        <span class="player-team">${prop.team} ${prop.position}</span>
+                        <span class="player-team">${prop.team}${prop.position ? ' ' + prop.position : ''}</span>
                     </div>
                 </div>
                 <span class="confidence-badge-small ${prop.confidence.toLowerCase()}">${prop.confidence}</span>
@@ -1102,7 +1341,7 @@ function createPropCard(prop, isSuggested) {
                 <div class="prop-type">${prop.prop}</div>
                 <div class="prop-line">
                     <span class="line-label">Projected:</span>
-                    <span class="line-value">${prop.line} yards</span>
+                    <span class="line-value">${typeof prop.line === 'number' ? prop.line.toFixed(1) : prop.line}${units}</span>
                 </div>
                 <div class="prop-picks">
                     <div class="prop-pick ${prop.recommendation === 'OVER' ? 'recommended' : ''}">

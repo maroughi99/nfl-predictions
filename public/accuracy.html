@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#0f0f1e">
+    <title>Prediction Accuracy Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .accuracy-container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .stat-card.success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .stat-card.warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .stat-value {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .stat-label {
+            font-size: 1rem;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-nba {
+            background: #f5576c;
+        }
+
+        .btn-nba:hover {
+            background: #e04555;
+        }
+
+        .date-input {
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            font-size: 1rem;
+        }
+
+        .results-section {
+            margin-top: 30px;
+        }
+
+        .date-group {
+            margin-bottom: 30px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .date-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255,255,255,0.1);
+            margin-bottom: 15px;
+        }
+
+        .date-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .date-accuracy {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .date-accuracy.good {
+            color: #38ef7d;
+        }
+
+        .date-accuracy.medium {
+            color: #ffd700;
+        }
+
+        .date-accuracy.poor {
+            color: #f5576c;
+        }
+
+        .game-result {
+            padding: 15px;
+            margin: 10px 0;
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            border-left: 4px solid transparent;
+        }
+
+        .game-result.correct {
+            border-left-color: #38ef7d;
+        }
+
+        .game-result.incorrect {
+            border-left-color: #f5576c;
+        }
+
+        .game-matchup {
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .game-scores {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .score-box {
+            padding: 8px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+        }
+
+        .score-label {
+            font-size: 0.85rem;
+            opacity: 0.7;
+            margin-bottom: 3px;
+        }
+
+        .score-value {
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        .confidence-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+
+        .confidence-badge.High {
+            background: #38ef7d;
+            color: #000;
+        }
+
+        .confidence-badge.Medium {
+            background: #ffd700;
+            color: #000;
+        }
+
+        .confidence-badge.Low {
+            background: #f5576c;
+            color: #fff;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2rem;
+            opacity: 0.7;
+        }
+
+        .status-message {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .status-message.success {
+            background: rgba(56, 239, 125, 0.2);
+            border: 1px solid #38ef7d;
+        }
+
+        .status-message.error {
+            background: rgba(245, 87, 108, 0.2);
+            border: 1px solid #f5576c;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .accuracy-container {
+                padding: 10px;
+                margin: 10px auto;
+            }
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .header p {
+                font-size: 0.9rem;
+            }
+
+            .header a {
+                font-size: 0.85rem !important;
+                padding: 8px 16px !important;
+                margin-bottom: 15px !important;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+
+            .stat-card {
+                padding: 20px;
+            }
+
+            .stat-value {
+                font-size: 2.5rem;
+            }
+
+            .stat-label {
+                font-size: 0.85rem;
+            }
+
+            .controls {
+                flex-direction: column;
+                gap: 10px;
+                padding: 15px;
+            }
+
+            .btn {
+                width: 100%;
+                padding: 12px;
+                font-size: 0.9rem;
+            }
+
+            .date-input {
+                width: 100%;
+                padding: 12px;
+                font-size: 0.9rem;
+            }
+
+            .date-group {
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+
+            .date-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .date-title {
+                font-size: 1.1rem;
+            }
+
+            .date-accuracy {
+                font-size: 1.5rem;
+            }
+
+            .game-result {
+                padding: 12px;
+            }
+
+            .game-matchup {
+                font-size: 1rem;
+            }
+
+            .game-scores {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .score-value {
+                font-size: 1rem;
+            }
+
+            .confidence-badge {
+                font-size: 0.75rem;
+                padding: 3px 10px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.3rem;
+            }
+
+            .stat-value {
+                font-size: 2rem;
+            }
+
+            .btn {
+                font-size: 0.85rem;
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="accuracy-container">
+        <div class="header">
+            <a href="/" style="display: inline-block; margin-bottom: 20px; padding: 10px 20px; background: rgba(255,255,255,0.1); border-radius: 8px; text-decoration: none; color: white; font-size: 1rem; transition: all 0.3s;">
+                ← Back to Predictions
+            </a>
+            <h1>🎯 Prediction Accuracy Tracker</h1>
+            <p>Track and analyze prediction performance over time</p>
+        </div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-label">Overall Accuracy</div>
+                <div class="stat-value" id="overallAccuracy">--</div>
+            </div>
+            <div class="stat-card success">
+                <div class="stat-label">Total Predictions</div>
+                <div class="stat-value" id="totalPredictions">--</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="stat-label">Pending Games</div>
+                <div class="stat-value" id="pendingGames">--</div>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: rgba(56, 239, 125, 0.1); border-radius: 15px; border: 2px solid rgba(56, 239, 125, 0.3);">
+            <div style="font-size: 1.3rem; font-weight: bold; margin-bottom: 10px;">✨ Fully Automatic Tracking</div>
+            <div style="font-size: 1rem; opacity: 0.9;">
+                <strong>Predictions</strong> auto-save when you view games.<br>
+                <strong>Results</strong> auto-update every 30 minutes after games end.<br>
+                <span style="opacity: 0.7; font-size: 0.9rem;">Just refresh this page to see your latest accuracy!</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="loadAccuracy()">🔄 Refresh Dashboard</button>
+            <button class="btn" onclick="updateAllResults()" style="opacity: 0.6;">⚙️ Manual Update (Optional)</button>
+        </div>
+
+        <div id="statusMessage"></div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="loading">Loading accuracy data...</div>
+        </div>
+    </div>
+
+    <script>
+        // Set today's date as default
+        document.getElementById('dateInput').valueAsDate = new Date();
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.className = `status-message ${isError ? 'error' : 'success'}`;
+            statusDiv.textContent = message;
+            setTimeout(() => {
+                statusDiv.textContent = '';
+                statusDiv.className = 'status-message';
+            }, 5000);
+        }
+
+        async function updateNFLResults() {
+            const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
+            try {
+                const response = await fetch(`/api/update-results?date=${date}`, { method: 'POST' });
+                const data = await response.json();
+                showStatus(`✅ ${data.message} (${data.updated} games completed)`);
+                loadAccuracy();
+            } catch (error) {
+                showStatus('❌ Failed to update NFL results', true);
+            }
+        }
+
+        async function updateNBAResults() {
+            const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
+            try {
+                const response = await fetch(`/api/nba/update-results?date=${date}`, { method: 'POST' });
+                const data = await response.json();
+                showStatus(`✅ ${data.message} (${data.updated} games completed)`);
+                loadAccuracy();
+            } catch (error) {
+                showStatus('❌ Failed to update NBA results', true);
+            }
+        }
+
+        async function updateAllResults() {
+            const date = document.getElementById('dateInput').value || new Date().toISOString().split('T')[0];
+            showStatus('🔄 Updating NFL and NBA results...');
+            
+            try {
+                const [nflResponse, nbaResponse] = await Promise.all([
+                    fetch(`/api/update-results?date=${date}`, { method: 'POST' }).then(r => r.json()),
+                    fetch(`/api/nba/update-results?date=${date}`, { method: 'POST' }).then(r => r.json())
+                ]);
+                
+                const totalUpdated = nflResponse.updated + nbaResponse.updated;
+                showStatus(`✅ Updated ${totalUpdated} game results (${nflResponse.updated} NFL, ${nbaResponse.updated} NBA)`);
+                loadAccuracy();
+            } catch (error) {
+                showStatus('❌ Failed to update results', true);
+            }
+        }
+
+        async function loadAccuracy() {
+            try {
+                const response = await fetch('/api/accuracy');
+                const data = await response.json();
+
+                // Update stats
+                const accuracy = data.overall?.winnerAccuracy ? data.overall.winnerAccuracy + '%' : '--';
+                document.getElementById('overallAccuracy').textContent = accuracy;
+                document.getElementById('totalPredictions').textContent = data.overall?.totalCompleted || 0;
+                document.getElementById('pendingGames').textContent = data.pending || 0;
+
+                // Render results by date
+                const resultsSection = document.getElementById('resultsSection');
+                
+                if (!data.byDate || data.byDate.length === 0) {
+                    resultsSection.innerHTML = '<div class="loading">No predictions with results yet. Predictions are stored automatically when you view games. After games complete, click "Update All Results" to see accuracy.</div>';
+                    return;
+                }
+
+                resultsSection.innerHTML = data.byDate.map(dateData => {
+                    const accuracy = parseFloat(dateData.accuracy);
+                    const accuracyClass = accuracy >= 70 ? 'good' : accuracy >= 50 ? 'medium' : 'poor';
+
+                    return `
+                        <div class="date-group">
+                            <div class="date-header">
+                                <div class="date-title">📅 ${new Date(dateData.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+                                <div class="date-accuracy ${accuracyClass}">${dateData.accuracy} (${dateData.correct}/${dateData.total})</div>
+                            </div>
+                            ${dateData.games.map(game => `
+                                <div class="game-result ${game.correct ? 'correct' : 'incorrect'}">
+                                    <div class="game-matchup">
+                                        ${game.correct ? '✅' : '❌'} ${game.awayTeam} @ ${game.homeTeam}
+                                        <span class="confidence-badge ${game.confidence}">${game.confidence}</span>
+                                    </div>
+                                    <div class="game-scores">
+                                        <div class="score-box">
+                                            <div class="score-label">Predicted</div>
+                                            <div class="score-value">${game.predicted}</div>
+                                        </div>
+                                        <div class="score-box">
+                                            <div class="score-label">Actual</div>
+                                            <div class="score-value">${game.actual}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to load accuracy:', error);
+                document.getElementById('resultsSection').innerHTML = '<div class="loading">❌ Failed to load accuracy data</div>';
+            }
+        }
+
+        // Load on page load
+        loadAccuracy();
+    </script>
+</body>
+</html>

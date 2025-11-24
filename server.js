@@ -1637,9 +1637,24 @@ app.get('/api/same-game-parlay', async (req, res) => {
     
     const props = [];
     
-    // Home QB - select QB with most games played (actual starter), minimum 150 yds/game to filter out garbage time QBs
-    const homeQB = homePlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
-      .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
+    // Known starter overrides (when backup has more games due to injury/incomplete data)
+    const knownStarters = {
+      'SF': 'Brock Purdy',
+      'TB': 'Baker Mayfield',
+      'KC': 'Patrick Mahomes',
+      'BUF': 'Josh Allen'
+      // Add more as needed
+    };
+    
+    // Home QB - prioritize known starter, otherwise select QB with most games played
+    let homeQB = null;
+    if (knownStarters[homeTeam]) {
+      homeQB = homePlayers.find(p => p.position === 'QB' && p.name === knownStarters[homeTeam] && p.passYards > 0);
+    }
+    if (!homeQB) {
+      homeQB = homePlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
+        .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
+    }
     if (homeQB) {
       const baseAvg = homeQB.passYardsPerGame;
       // Adjust line based on opponent's scoring (weak defense = higher line)
@@ -1660,9 +1675,15 @@ app.get('/api/same-game-parlay', async (req, res) => {
       });
     }
     
-    // Away QB - select QB with most games played (actual starter), minimum 150 yds/game to filter out garbage time QBs
-    const awayQB = awayPlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
-      .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
+    // Away QB - prioritize known starter, otherwise select QB with most games played
+    let awayQB = null;
+    if (knownStarters[awayTeam]) {
+      awayQB = awayPlayers.find(p => p.position === 'QB' && p.name === knownStarters[awayTeam] && p.passYards > 0);
+    }
+    if (!awayQB) {
+      awayQB = awayPlayers.filter(p => p.position === 'QB' && p.passYards > 0 && p.passYardsPerGame >= 150)
+        .sort((a, b) => b.gamesPlayed - a.gamesPlayed)[0];
+    }
     if (awayQB) {
       const baseAvg = awayQB.passYardsPerGame;
       // Adjust line based on opponent's defense

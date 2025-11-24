@@ -61,6 +61,37 @@ function initDatabase() {
     )
   `);
 
+  // Player props predictions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS prop_predictions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id TEXT NOT NULL,
+      game_date TEXT NOT NULL,
+      player_name TEXT NOT NULL,
+      team TEXT NOT NULL,
+      position TEXT NOT NULL,
+      prop_type TEXT NOT NULL,
+      line REAL NOT NULL,
+      prediction TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      prediction_time TEXT NOT NULL,
+      UNIQUE(game_id, player_name, prop_type)
+    )
+  `);
+
+  // Player props actual results table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS prop_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      game_id TEXT NOT NULL,
+      player_name TEXT NOT NULL,
+      prop_type TEXT NOT NULL,
+      actual_value REAL NOT NULL,
+      updated_time TEXT NOT NULL,
+      UNIQUE(game_id, player_name, prop_type)
+    )
+  `);
+
   console.log('✅ Database initialized');
 }
 
@@ -219,6 +250,123 @@ function calculateAccuracy() {
   };
 }
 
+// Save player prop prediction
+function savePropPrediction(gameId, gameDate, prop) {
+  try {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO prop_predictions (
+        game_id, game_date, player_name, team, position,
+        prop_type, line, prediction, confidence, prediction_time
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      gameId,
+      gameDate,
+      prop.player,
+      prop.team,
+      prop.position,
+      prop.prop,
+      prop.line,
+      prop.recommendation,
+      prop.confidence,
+      new Date().toISOString()
+    );
+
+    return true;
+  } catch (error) {
+    console.error('Error saving prop prediction:', error.message);
+    return false;
+  }
+}
+
+// Save actual prop result
+function savePropResult(gameId, playerName, propType, actualValue) {
+  try {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO prop_results (
+        game_id, player_name, prop_type, actual_value, updated_time
+      ) VALUES (?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(gameId, playerName, propType, actualValue, new Date().toISOString());
+    return true;
+  } catch (error) {
+    console.error('Error saving prop result:', error.message);
+    return false;
+  }
+}
+
+// Calculate prop accuracy
+function calculatePropAccuracy() {
+  const stmt = db.prepare(`
+    SELECT 
+      p.*,
+      r.actual_value
+    FROM prop_predictions p
+    INNER JOIN prop_results r ON p.game_id = r.game_id 
+      AND p.player_name = r.player_name 
+      AND p.prop_type = r.prop_type
+  `);
+
+  const completed = stmt.all();
+
+  if (completed.length === 0) {
+    return {
+      totalProps: 0,
+      totalCompleted: 0,
+      correctPredictions: 0,
+      accuracy: 0,
+      byConfidence: {}
+    };
+  }
+
+  let correct = 0;
+  const byConfidence = { High: { correct: 0, total: 0 }, Medium: { correct: 0, total: 0 }, Low: { correct: 0, total: 0 } };
+
+  completed.forEach(prop => {
+    let isCorrect = false;
+    
+    if (prop.prediction === 'OVER') {
+      isCorrect = prop.actual_value > prop.line;
+    } else if (prop.prediction === 'UNDER') {
+      isCorrect = prop.actual_value < prop.line;
+    }
+
+    if (isCorrect) {
+      correct++;
+      byConfidence[prop.confidence].correct++;
+    }
+    byConfidence[prop.confidence].total++;
+  });
+
+  const totalProps = db.prepare('SELECT COUNT(*) as count FROM prop_predictions').get().count;
+
+  return {
+    totalProps,
+    totalCompleted: completed.length,
+    correctPredictions: correct,
+    accuracy: ((correct / completed.length) * 100).toFixed(1),
+    byConfidence: {
+      High: {
+        correct: byConfidence.High.correct,
+        total: byConfidence.High.total,
+        accuracy: byConfidence.High.total > 0 ? ((byConfidence.High.correct / byConfidence.High.total) * 100).toFixed(1) : 0
+      },
+      Medium: {
+        correct: byConfidence.Medium.correct,
+        total: byConfidence.Medium.total,
+        accuracy: byConfidence.Medium.total > 0 ? ((byConfidence.Medium.correct / byConfidence.Medium.total) * 100).toFixed(1) : 0
+      },
+      Low: {
+        correct: byConfidence.Low.correct,
+        total: byConfidence.Low.total,
+        accuracy: byConfidence.Low.total > 0 ? ((byConfidence.Low.correct / byConfidence.Low.total) * 100).toFixed(1) : 0
+      }
+    }
+  };
+}
+
 // Get recent predictions (last N)
 function getRecentPredictions(limit = 20) {
   const stmt = db.prepare(`
@@ -253,6 +401,20 @@ function getPredictionsByDate(date) {
   return stmt.all(date);
 }
 
+// Get prop predictions that don't have results yet
+function getPendingPropPredictions() {
+  const stmt = db.prepare(`
+    SELECT pp.*
+    FROM prop_predictions pp
+    LEFT JOIN prop_results pr ON pp.game_id = pr.game_id 
+      AND pp.player_name = pr.player_name 
+      AND pp.prop_type = pr.prop_type
+    WHERE pr.actual_value IS NULL
+  `);
+
+  return stmt.all();
+}
+
 // Initialize on load
 initDatabase();
 
@@ -262,5 +424,9 @@ module.exports = {
   getPredictionsWithResults,
   calculateAccuracy,
   getRecentPredictions,
-  getPredictionsByDate
+  getPredictionsByDate,
+  savePropPrediction,
+  savePropResult,
+  calculatePropAccuracy,
+  getPendingPropPredictions
 };

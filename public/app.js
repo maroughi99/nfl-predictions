@@ -26,6 +26,7 @@ function setupEventListeners() {
     
     // History tab buttons
     document.getElementById('updateResultsBtn')?.addEventListener('click', updateResults);
+    document.getElementById('updatePropResultsBtn')?.addEventListener('click', updatePropResults);
 }
 
 // Switch tabs
@@ -48,6 +49,7 @@ function switchTab(tabName) {
     // Load data if switching to history
     if (tabName === 'history') {
         loadAccuracy();
+        loadPropAccuracy();
         loadHistory();
     }
     
@@ -81,6 +83,33 @@ async function loadAccuracy() {
         }
     } catch (error) {
         console.error('Error loading accuracy:', error);
+    }
+}
+
+// Load prop accuracy metrics
+async function loadPropAccuracy() {
+    try {
+        const response = await fetch(`${API_BASE}/prop-accuracy`);
+        const data = await response.json();
+        
+        document.getElementById('totalProps').textContent = data.totalProps || 0;
+        document.getElementById('completedProps').textContent = data.totalCompleted || 0;
+        document.getElementById('propAccuracy').textContent = `${data.accuracy || 0}%`;
+        document.getElementById('correctProps').textContent = `${data.correctPredictions || 0}/${data.totalCompleted || 0}`;
+        
+        // Confidence breakdown
+        if (data.byConfidence) {
+            document.getElementById('propHighAccuracy').textContent = `${data.byConfidence.High.accuracy}%`;
+            document.getElementById('propHighDetail').textContent = `${data.byConfidence.High.correct}/${data.byConfidence.High.total} correct`;
+            
+            document.getElementById('propMediumAccuracy').textContent = `${data.byConfidence.Medium.accuracy}%`;
+            document.getElementById('propMediumDetail').textContent = `${data.byConfidence.Medium.correct}/${data.byConfidence.Medium.total} correct`;
+            
+            document.getElementById('propLowAccuracy').textContent = `${data.byConfidence.Low.accuracy}%`;
+            document.getElementById('propLowDetail').textContent = `${data.byConfidence.Low.correct}/${data.byConfidence.Low.total} correct`;
+        }
+    } catch (error) {
+        console.error('Error loading prop accuracy:', error);
     }
 }
 
@@ -177,6 +206,40 @@ async function updateResults() {
                 <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
             </svg>
             Update Results from ESPN
+        `;
+    }
+}
+
+// Update prop results from Sleeper
+async function updatePropResults() {
+    const btn = document.getElementById('updatePropResultsBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Updating...';
+    
+    try {
+        const response = await fetch(`${API_BASE}/update-all-prop-results`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            alert(`✅ Updated ${data.updated} player prop results`);
+            await loadPropAccuracy();
+        } else {
+            alert('❌ Failed to update prop results');
+        }
+    } catch (error) {
+        console.error('Error updating prop results:', error);
+        alert('❌ Error updating prop results');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+            </svg>
+            Update Prop Results from Sleeper
         `;
     }
 }
@@ -809,7 +872,7 @@ async function loadParlayGames() {
         
         games.forEach(game => {
             const option = document.createElement('option');
-            option.value = `${game.homeTeam}|${game.team1}`;
+            option.value = `${game.homeTeam}|${game.team1}|${game.id}|${game.gameDate}`;
             const gameDate = new Date(game.gameTime).toLocaleString();
             option.textContent = `${game.team1} @ ${game.homeTeam} (${gameDate})`;
             select.appendChild(option);
@@ -830,7 +893,7 @@ async function loadParlayGames() {
 
 async function generateParlay() {
     const select = document.getElementById('parlayGameSelect');
-    const [homeTeam, awayTeam] = select.value.split('|');
+    const [homeTeam, awayTeam, gameId, gameDate] = select.value.split('|');
     
     if (!homeTeam || !awayTeam) return;
     
@@ -839,7 +902,7 @@ async function generateParlay() {
     document.getElementById('parlayResults').style.display = 'none';
     
     try {
-        const response = await fetch(`${API_BASE}/same-game-parlay?homeTeam=${homeTeam}&awayTeam=${awayTeam}`);
+        const response = await fetch(`${API_BASE}/same-game-parlay?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}`);
         const data = await response.json();
         
         // Display suggested parlay

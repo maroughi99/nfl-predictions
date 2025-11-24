@@ -1174,8 +1174,8 @@ function mapESPNTeamCode(espnTeam) {
 async function fetchNFLGames(dateStr) {
   try {
     // ESPN Scoreboard API - free and public
-    const formattedDate = dateStr.replace(/-/g, '');
-    const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?dates=${formattedDate}`;
+    // Use default (no date param) to get current week, then filter by requested date
+    const url = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard`;
     
     const response = await axios.get(url, { timeout: 10000 });
     const data = response.data;
@@ -1198,6 +1198,14 @@ async function fetchNFLGames(dateStr) {
       
       // Skip if we don't have these teams
       if (!nflTeams[homeCode] || !nflTeams[awayCode]) continue;
+      
+      // Filter by date - convert game time to EST and check if it matches requested date
+      const gameDate = new Date(event.date);
+      const estGameDate = new Date(gameDate.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const gameDateStr = estGameDate.toISOString().split('T')[0];
+      
+      // Skip if game is not on the requested date (in EST)
+      if (dateStr && gameDateStr !== dateStr) continue;
       
       games.push({
         id: event.id,
@@ -1396,6 +1404,98 @@ app.get('/api/accuracy', (req, res) => {
   }
 });
 
+// Get prop accuracy
+app.get('/api/prop-accuracy', (req, res) => {
+  try {
+    const propAccuracy = db.calculatePropAccuracy();
+    res.json(propAccuracy);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to calculate prop accuracy', message: error.message });
+  }
+});
+
+// Update prop results
+app.post('/api/update-prop-results', (req, res) => {
+  try {
+    const { gameId, props } = req.body;
+    
+    if (!gameId || !props || !Array.isArray(props)) {
+      return res.status(400).json({ error: 'Invalid request. Provide gameId and props array.' });
+    }
+    
+    props.forEach(prop => {
+      if (prop.playerName && prop.propType && prop.actualValue !== undefined) {
+        db.savePropResult(gameId, prop.playerName, prop.propType, prop.actualValue);
+      }
+    });
+    
+    res.json({ success: true, message: `Updated ${props.length} prop results` });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update prop results', message: error.message });
+  }
+});
+
+// Update all pending prop results from Sleeper
+app.post('/api/update-all-prop-results', async (req, res) => {
+  try {
+    const players = await getSleeperPlayers();
+    const allStats = await getSleeperStats();
+    
+    // Get all prop predictions that don't have results yet
+    const pendingProps = db.getPendingPropPredictions();
+    
+    if (!pendingProps || pendingProps.length === 0) {
+      return res.json({ success: true, updated: 0, message: 'No pending prop predictions to update' });
+    }
+    
+    let totalUpdated = 0;
+    
+    for (const prop of pendingProps) {
+      // Find player ID
+      let playerId = null;
+      for (const [id, player] of Object.entries(players)) {
+        if (player.full_name === prop.player_name && player.team === prop.team) {
+          playerId = id;
+          break;
+        }
+      }
+      
+      if (!playerId || !allStats[playerId]) continue;
+      
+      const stats = allStats[playerId];
+      let actualValue = null;
+      
+      // Map prop type to stat field
+      if (prop.prop_type === 'Passing Yards') {
+        actualValue = stats.pass_yd || 0;
+      } else if (prop.prop_type === 'Rushing Yards') {
+        actualValue = stats.rush_yd || 0;
+      } else if (prop.prop_type === 'Receiving Yards') {
+        actualValue = stats.rec_yd || 0;
+      } else if (prop.prop_type === 'Receptions') {
+        actualValue = stats.rec || 0;
+      } else if (prop.prop_type === 'Passing TDs') {
+        actualValue = stats.pass_td || 0;
+      } else if (prop.prop_type === 'Rushing TDs') {
+        actualValue = stats.rush_td || 0;
+      }
+      
+      if (actualValue !== null) {
+        db.savePropResult(prop.game_id, prop.player_name, prop.prop_type, actualValue);
+        totalUpdated++;
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      updated: totalUpdated,
+      message: `Updated ${totalUpdated} player prop results from Sleeper API`
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update prop results', message: error.message });
+  }
+});
+
 // Get prediction history
 app.get('/api/history', (req, res) => {
   try {
@@ -1418,7 +1518,7 @@ app.get('/api/history', (req, res) => {
 // Same-Game Parlay Generator
 app.get('/api/same-game-parlay', async (req, res) => {
   try {
-    const { homeTeam, awayTeam } = req.query;
+    const { homeTeam, awayTeam, gameId, gameDate } = req.query;
     
     if (!homeTeam || !awayTeam) {
       return res.status(400).json({ error: 'homeTeam and awayTeam parameters required' });
@@ -1595,6 +1695,24 @@ app.get('/api/same-game-parlay', async (req, res) => {
     const highConfidenceProps = props.filter(p => p.confidence === 'High' && p.recommendation !== 'PASS');
     const suggestedParlay = highConfidenceProps.length > 0 ? highConfidenceProps.slice(0, 4) : props.filter(p => p.recommendation !== 'PASS').slice(0, 3)
     
+    // Save prop predictions to database if we have gameId and gameDate
+    if (gameId && gameDate) {
+      props.forEach(prop => {
+        db.savePropPrediction(
+          gameId,
+          gameDate,
+          prop.player,
+          prop.team,
+          prop.position,
+          prop.prop,
+          prop.line,
+          prop.recommendation,
+          prop.confidence
+        );
+      });
+      console.log(`💾 Saved ${props.length} prop predictions for ${awayTeam} @ ${homeTeam}`);
+    }
+    
     res.json({
       game: `${awayTeam} @ ${homeTeam}`,
       allProps: props,
@@ -1666,6 +1784,111 @@ async function autoPredictUpcomingGames() {
   }
 }
 
+// Auto-update results from ESPN for completed games
+async function autoUpdateResults() {
+  try {
+    console.log('🔄 Auto-updating results from ESPN...');
+    
+    // Get yesterday's and today's games
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const dates = [
+      yesterday.toISOString().split('T')[0],
+      today.toISOString().split('T')[0]
+    ];
+    
+    let totalUpdated = 0;
+    
+    for (const dateStr of dates) {
+      const games = await fetchNFLGames(dateStr);
+      
+      for (const game of games) {
+        if (game.status.completed) {
+          const homeScore = parseInt(game.homeTeam.score) || 0;
+          const awayScore = parseInt(game.awayTeam.score) || 0;
+          
+          const saved = db.saveActualResult(
+            game.id,
+            dateStr,
+            game.homeTeam.code,
+            game.awayTeam.code,
+            homeScore,
+            awayScore
+          );
+          
+          if (saved) totalUpdated++;
+        }
+      }
+    }
+    
+    console.log(`✅ Auto-update complete: ${totalUpdated} game results updated`);
+  } catch (error) {
+    console.error('❌ Auto-update error:', error.message);
+  }
+}
+
+// Auto-update prop results from Sleeper stats for completed games
+async function autoUpdatePropResults() {
+  try {
+    console.log('🔄 Auto-updating player prop results...');
+    
+    const players = await getSleeperPlayers();
+    const allStats = await getSleeperStats();
+    
+    // Get all prop predictions that don't have results yet
+    const pendingProps = db.getPendingPropPredictions();
+    
+    if (!pendingProps || pendingProps.length === 0) {
+      console.log('   No pending prop predictions to update');
+      return;
+    }
+    
+    let totalUpdated = 0;
+    
+    for (const prop of pendingProps) {
+      // Find player ID
+      let playerId = null;
+      for (const [id, player] of Object.entries(players)) {
+        if (player.full_name === prop.player_name && player.team === prop.team) {
+          playerId = id;
+          break;
+        }
+      }
+      
+      if (!playerId || !allStats[playerId]) continue;
+      
+      const stats = allStats[playerId];
+      let actualValue = null;
+      
+      // Map prop type to stat field
+      if (prop.prop_type === 'Passing Yards') {
+        actualValue = stats.pass_yd || 0;
+      } else if (prop.prop_type === 'Rushing Yards') {
+        actualValue = stats.rush_yd || 0;
+      } else if (prop.prop_type === 'Receiving Yards') {
+        actualValue = stats.rec_yd || 0;
+      } else if (prop.prop_type === 'Receptions') {
+        actualValue = stats.rec || 0;
+      } else if (prop.prop_type === 'Passing TDs') {
+        actualValue = stats.pass_td || 0;
+      } else if (prop.prop_type === 'Rushing TDs') {
+        actualValue = stats.rush_td || 0;
+      }
+      
+      if (actualValue !== null) {
+        db.savePropResult(prop.game_id, prop.player_name, prop.prop_type, actualValue);
+        totalUpdated++;
+      }
+    }
+    
+    console.log(`✅ Auto-prop-update complete: ${totalUpdated} prop results updated`);
+  } catch (error) {
+    console.error('❌ Auto-prop-update error:', error.message);
+  }
+}
+
 // Schedule auto-predictions to run once per day at 8 AM
 function scheduleAutoPredictions() {
   const runDaily = () => {
@@ -1674,7 +1897,13 @@ function scheduleAutoPredictions() {
     
     // Run at 8 AM
     if (hour === 8) {
-      autoPredictUpcomingGames();
+      autoUpdateResults(); // Update completed game results first
+      setTimeout(() => {
+        autoUpdatePropResults(); // Then update prop results
+      }, 5000);
+      setTimeout(() => {
+        autoPredictUpcomingGames(); // Then generate new predictions
+      }, 10000); // Wait 10 seconds total
     }
   };
   
@@ -1684,10 +1913,20 @@ function scheduleAutoPredictions() {
   // Also run on server start if it's between 8 AM and 9 AM
   const now = new Date();
   if (now.getHours() === 8) {
-    autoPredictUpcomingGames();
+    autoUpdateResults().then(() => {
+      setTimeout(() => {
+        autoUpdatePropResults();
+      }, 5000);
+      setTimeout(() => {
+        autoPredictUpcomingGames();
+      }, 10000);
+    });
   }
   
   console.log('⏰ Auto-prediction scheduler enabled (runs daily at 8 AM)');
+  console.log('   - Updates completed game results');
+  console.log('   - Updates player prop results');
+  console.log('   - Generates predictions for upcoming games');
 }
 
 // Serve the main page

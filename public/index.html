@@ -374,6 +374,67 @@
                     </button>
                 </section>
 
+                <!-- Player Prop Accuracy -->
+                <section class="accuracy-section card">
+                    <h2 class="section-title">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 6v6l4 2"/>
+                        </svg>
+                        Player Prop Accuracy
+                    </h2>
+                    <div id="propAccuracyStats" class="accuracy-grid">
+                        <div class="accuracy-card">
+                            <div class="accuracy-label">Total Props</div>
+                            <div class="accuracy-value" id="totalProps">0</div>
+                        </div>
+                        <div class="accuracy-card">
+                            <div class="accuracy-label">Completed Props</div>
+                            <div class="accuracy-value" id="completedProps">0</div>
+                        </div>
+                        <div class="accuracy-card highlight">
+                            <div class="accuracy-label">Prop Accuracy</div>
+                            <div class="accuracy-value" id="propAccuracy">0%</div>
+                        </div>
+                        <div class="accuracy-card">
+                            <div class="accuracy-label">Correct Props</div>
+                            <div class="accuracy-value" id="correctProps">0/0</div>
+                        </div>
+                    </div>
+                    
+                    <h3 class="subsection-title">Confidence Level Performance</h3>
+                    <div class="confidence-breakdown">
+                        <div class="confidence-stat">
+                            <div class="conf-header">
+                                <span class="conf-label high">High Confidence</span>
+                                <span class="conf-accuracy" id="propHighAccuracy">0%</span>
+                            </div>
+                            <div class="conf-detail" id="propHighDetail">0/0 correct</div>
+                        </div>
+                        <div class="confidence-stat">
+                            <div class="conf-header">
+                                <span class="conf-label medium">Medium Confidence</span>
+                                <span class="conf-accuracy" id="propMediumAccuracy">0%</span>
+                            </div>
+                            <div class="conf-detail" id="propMediumDetail">0/0 correct</div>
+                        </div>
+                        <div class="confidence-stat">
+                            <div class="conf-header">
+                                <span class="conf-label low">Low Confidence</span>
+                                <span class="conf-accuracy" id="propLowAccuracy">0%</span>
+                            </div>
+                            <div class="conf-detail" id="propLowDetail">0/0 correct</div>
+                        </div>
+                    </div>
+                    
+                    <button id="updatePropResultsBtn" class="update-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
+                        </svg>
+                        Update Prop Results from Sleeper
+                    </button>
+                </section>
+
                 <!-- Prediction History -->
                 <section class="history-section card">
                     <h2 class="section-title">

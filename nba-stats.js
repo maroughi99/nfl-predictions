@@ -21,7 +21,7 @@ const nbaTeamIds = {
   'UTA': '1610612762', 'WAS': '1610612764'
 };
 
-// Fetch all NBA player stats for 2024-25 season from NBA Stats API
+// Fetch all NBA player stats for 2024-25 season from ESPN API (faster and more reliable)
 async function getNBAPlayerStats() {
   const now = Date.now();
   
@@ -32,97 +32,75 @@ async function getNBAPlayerStats() {
   }
   
   try {
-    console.log('🏀 Fetching NBA player stats from NBA.com API...');
+    console.log('🏀 Fetching NBA team rosters from ESPN API...');
     
     const playerStats = {};
+    let totalPlayers = 0;
     
-    // Fetch league-wide player stats
-    const url = 'https://stats.nba.com/stats/leaguedashplayerstats?College=&Conference=&Country=&DateFrom=&DateTo=&Division=&DraftPick=&DraftYear=&GameScope=&GameSegment=&Height=&LastNGames=0&LeagueID=00&Location=&MeasureType=Base&Month=0&OpponentTeamID=0&Outcome=&PORound=0&PaceAdjust=N&PerMode=PerGame&Period=0&PlayerExperience=&PlayerPosition=&PlusMinus=N&Rank=N&Season=2024-25&SeasonSegment=&SeasonType=Regular+Season&ShotClockRange=&StarterBench=&TeamID=0&TwoWay=0&VsConference=&VsDivision=&Weight=';
-    
-    const response = await axios.get(url, {
-      timeout: 30000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json',
-        'Referer': 'https://www.nba.com/',
-        'Origin': 'https://www.nba.com'
-      }
-    });
-    
-    if (response.data && response.data.resultSets && response.data.resultSets[0]) {
-      const headers = response.data.resultSets[0].headers;
-      const rows = response.data.resultSets[0].rowSet;
-      
-      // Find column indices
-      const playerIdIdx = headers.indexOf('PLAYER_ID');
-      const playerNameIdx = headers.indexOf('PLAYER_NAME');
-      const teamAbbrIdx = headers.indexOf('TEAM_ABBREVIATION');
-      const gamesIdx = headers.indexOf('GP');
-      const ptsIdx = headers.indexOf('PTS');
-      const rebIdx = headers.indexOf('REB');
-      const astIdx = headers.indexOf('AST');
-      const stlIdx = headers.indexOf('STL');
-      const blkIdx = headers.indexOf('BLK');
-      const toIdx = headers.indexOf('TOV');
-      const fgPctIdx = headers.indexOf('FG_PCT');
-      const fg3PctIdx = headers.indexOf('FG3_PCT');
-      const ftPctIdx = headers.indexOf('FT_PCT');
-      const fgmIdx = headers.indexOf('FGM');
-      const fgaIdx = headers.indexOf('FGA');
-      const fg3mIdx = headers.indexOf('FG3M');
-      const fg3aIdx = headers.indexOf('FG3A');
-      const ftmIdx = headers.indexOf('FTM');
-      const ftaIdx = headers.indexOf('FTA');
-      const minIdx = headers.indexOf('MIN');
-      const plusMinusIdx = headers.indexOf('PLUS_MINUS');
-      
-      console.log(`✓ Found ${rows.length} NBA players with real stats`);
-      
-      for (const row of rows) {
-        const teamAbbr = row[teamAbbrIdx];
-        const playerName = row[playerNameIdx];
-        const key = `${playerName}|${teamAbbr}`;
+    // Fetch roster for each team from ESPN (much faster than NBA.com)
+    for (const [teamCode, espnId] of Object.entries(espnNBATeamIds)) {
+      try {
+        const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/${espnId}/roster`;
         
-        playerStats[key] = {
-          playerId: row[playerIdIdx],
-          name: playerName,
-          team: teamAbbr,
-          position: 'G', // Position not in this endpoint, set default
-          gamesPlayed: parseInt(row[gamesIdx]) || 0,
-          points: parseFloat(row[ptsIdx]) || 0,
-          rebounds: parseFloat(row[rebIdx]) || 0,
-          assists: parseFloat(row[astIdx]) || 0,
-          steals: parseFloat(row[stlIdx]) || 0,
-          blocks: parseFloat(row[blkIdx]) || 0,
-          turnovers: parseFloat(row[toIdx]) || 0,
-          fgPct: parseFloat(row[fgPctIdx]) || 0,
-          fg3Pct: parseFloat(row[fg3PctIdx]) || 0,
-          ftPct: parseFloat(row[ftPctIdx]) || 0,
-          fgMade: parseFloat(row[fgmIdx]) || 0,
-          fgAttempts: parseFloat(row[fgaIdx]) || 0,
-          fg3Made: parseFloat(row[fg3mIdx]) || 0,
-          fg3Attempts: parseFloat(row[fg3aIdx]) || 0,
-          ftMade: parseFloat(row[ftmIdx]) || 0,
-          ftAttempts: parseFloat(row[ftaIdx]) || 0,
-          minutes: parseFloat(row[minIdx]) || 0,
-          plusMinus: parseFloat(row[plusMinusIdx]) || 0
-        };
+        const response = await axios.get(url, { timeout: 5000 });
+        
+        if (response.data && response.data.athletes) {
+          for (const athlete of response.data.athletes) {
+            if (!athlete.statistics || athlete.statistics.length === 0) continue;
+            
+            // Get season stats (most recent full stats)
+            const stats = athlete.statistics.find(s => s.type === 'total') || athlete.statistics[0];
+            if (!stats || !stats.stats) continue;
+            
+            const playerName = athlete.fullName || athlete.displayName;
+            const key = `${playerName}|${teamCode}`;
+            
+            // Map ESPN stats to our format
+            playerStats[key] = {
+              playerId: athlete.id,
+              name: playerName,
+              team: teamCode,
+              position: athlete.position?.abbreviation || 'G',
+              gamesPlayed: parseInt(stats.stats.gamesPlayed) || 0,
+              points: parseFloat(stats.stats.avgPoints) || 0,
+              rebounds: parseFloat(stats.stats.avgRebounds) || 0,
+              assists: parseFloat(stats.stats.avgAssists) || 0,
+              steals: parseFloat(stats.stats.avgSteals) || 0,
+              blocks: parseFloat(stats.stats.avgBlocks) || 0,
+              turnovers: parseFloat(stats.stats.avgTurnovers) || 0,
+              fgPct: parseFloat(stats.stats.fieldGoalPct) || 0.45,
+              fg3Pct: parseFloat(stats.stats.threePointFieldGoalPct) || 0.35,
+              ftPct: parseFloat(stats.stats.freeThrowPct) || 0.75,
+              fgMade: parseFloat(stats.stats.fieldGoalsMade) || 0,
+              fgAttempts: parseFloat(stats.stats.fieldGoalsAttempted) || 0,
+              fg3Made: parseFloat(stats.stats.threePointFieldGoalsMade) || 0,
+              fg3Attempts: parseFloat(stats.stats.threePointFieldGoalsAttempted) || 0,
+              ftMade: parseFloat(stats.stats.freeThrowsMade) || 0,
+              ftAttempts: parseFloat(stats.stats.freeThrowsAttempted) || 0,
+              minutes: parseFloat(stats.stats.avgMinutes) || 0,
+              plusMinus: 0
+            };
+            totalPlayers++;
+          }
+        }
+        
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (teamError) {
+        console.warn(`⚠️  Failed to fetch roster for ${teamCode}:`, teamError.message);
       }
-      
-      nbaPlayerStatsCache = playerStats;
-      nbaPlayerStatsCacheTime = now;
-      console.log(`✅ NBA player stats loaded and cached (${Object.keys(playerStats).length} players)`);
-      return playerStats;
     }
+    
+    nbaPlayerStatsCache = playerStats;
+    nbaPlayerStatsCacheTime = now;
+    console.log(`✅ NBA player stats loaded from ESPN (${totalPlayers} players across ${Object.keys(espnNBATeamIds).length} teams)`);
+    return playerStats;
     
   } catch (error) {
     console.error('⚠️  Failed to fetch NBA stats:', error.message);
     // Return cache if available, otherwise empty object
     return nbaPlayerStatsCache || {};
   }
-  
-  console.warn('⚠️  No NBA player data fetched');
-  return {};
 }
 
 // Get team stats from aggregated player data

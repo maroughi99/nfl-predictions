@@ -4,6 +4,8 @@ const path = require('path');
 const axios = require('axios');
 const nflRealPlayers = require('./realPlayers');
 const { scrapeNFLInjuries, isPlayerOut } = require('./injuryScraper');
+const { nbaTeams, espnNBATeamIds } = require('./nba-data');
+const { getNBAPlayerStats, getNBATeamStats } = require('./nba-stats');
 
 // Use PostgreSQL on Vercel, SQLite locally
 const db = process.env.POSTGRES_URL 
@@ -1269,9 +1271,80 @@ async function fetchNFLGames(dateStr) {
   }
 }
 
+// Fetch REAL NBA games from ESPN API
+async function fetchNBAGames(dateStr) {
+  try {
+    // ESPN NBA API endpoint - real games
+    const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr.replace(/-/g, '')}`;
+    const response = await axios.get(url, { timeout: 8000 });
+    const data = response.data;
+    
+    if (!data.events || data.events.length === 0) {
+      return [];
+    }
+    
+    const games = [];
+    
+    for (const event of data.events) {
+      const competition = event.competitions[0];
+      const homeTeam = competition.competitors.find(t => t.homeAway === 'home');
+      const awayTeam = competition.competitors.find(t => t.homeAway === 'away');
+      
+      if (!homeTeam || !awayTeam) continue;
+      
+      const homeCode = homeTeam.team.abbreviation;
+      const awayCode = awayTeam.team.abbreviation;
+      
+      // Skip if we don't have these teams
+      if (!nbaTeams[homeCode] || !nbaTeams[awayCode]) continue;
+      
+      games.push({
+        id: event.id,
+        name: event.name,
+        shortName: event.shortName,
+        date: event.date,
+        status: {
+          state: competition.status.type.state,
+          detail: competition.status.type.detail,
+          completed: competition.status.type.completed
+        },
+        homeTeam: {
+          code: homeCode,
+          name: nbaTeams[homeCode].name,
+          abbreviation: homeTeam.team.abbreviation,
+          score: homeTeam.score,
+          record: homeTeam.records ? homeTeam.records[0]?.summary : 'N/A',
+          logo: homeTeam.team.logo
+        },
+        awayTeam: {
+          code: awayCode,
+          name: nbaTeams[awayCode].name,
+          abbreviation: awayTeam.team.abbreviation,
+          score: awayTeam.score,
+          record: awayTeam.records ? awayTeam.records[0]?.summary : 'N/A',
+          logo: awayTeam.team.logo
+        },
+        venue: competition.venue ? competition.venue.fullName : 'TBD',
+        broadcast: competition.broadcasts && competition.broadcasts.length > 0 
+          ? competition.broadcasts[0].names.join(', ') 
+          : 'TBD'
+      });
+    }
+    
+    return games;
+  } catch (error) {
+    console.error('Error fetching NBA games from ESPN:', error.message);
+    return [];
+  }
+}
+
 // API Routes
 app.get('/api/teams', (req, res) => {
   res.json(nflTeams);
+});
+
+app.get('/api/nba/teams', (req, res) => {
+  res.json(nbaTeams);
 });
 
 app.get('/api/games', async (req, res) => {
@@ -1283,6 +1356,18 @@ app.get('/api/games', async (req, res) => {
     res.json({ date: dateStr, games });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch games', message: error.message });
+  }
+});
+
+app.get('/api/nba/games', async (req, res) => {
+  const { date } = req.query;
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  
+  try {
+    const games = await fetchNBAGames(dateStr);
+    res.json({ date: dateStr, games });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch NBA games', message: error.message });
   }
 });
 

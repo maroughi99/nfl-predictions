@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 Smart NBA SGP Builder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .game-selector {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        select, button {
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 2px solid #ddd;
+            font-size: 16px;
+        }
+
+        select {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .role-player-traps {
+            background: #fff3cd;
+            border: 3px solid #ffc107;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .role-player-traps h2 {
+            color: #856404;
+            margin-bottom: 15px;
+        }
+
+        .trap-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #dc3545;
+        }
+
+        .trap-item .player-name {
+            font-weight: bold;
+            color: #dc3545;
+            font-size: 1.1em;
+        }
+
+        .trap-item .warning {
+            color: #856404;
+            margin: 5px 0;
+        }
+
+        .trap-item .alternative {
+            color: #28a745;
+            font-style: italic;
+        }
+
+        .recommendations {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .parlay-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .parlay-card.conservative {
+            border-top: 5px solid #28a745;
+        }
+
+        .parlay-card.balanced {
+            border-top: 5px solid #007bff;
+        }
+
+        .parlay-card.aggressive {
+            border-top: 5px solid #dc3545;
+        }
+
+        .parlay-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .parlay-title {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .parlay-odds {
+            font-size: 1.3em;
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .hit-rate {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .parlay-reasoning {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+
+        .leg {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .leg-info {
+            flex: 1;
+        }
+
+        .player-name-leg {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .prop-line {
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .confidence-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .confidence-high {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .confidence-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .confidence-low {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .usage-tier {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 15px;
+            font-size: 0.75em;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+
+        .tier-primary {
+            background: #28a745;
+            color: white;
+        }
+
+        .tier-secondary {
+            background: #007bff;
+            color: white;
+        }
+
+        .tier-tertiary {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .tier-role {
+            background: #6c757d;
+            color: white;
+        }
+
+        .warnings-section {
+            margin-top: 15px;
+            padding: 10px;
+            background: #fff3cd;
+            border-radius: 8px;
+        }
+
+        .warning-item {
+            color: #856404;
+            margin: 5px 0;
+        }
+
+        .correlations {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .correlation-item {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #007bff;
+        }
+
+        .no-traps {
+            background: #d4edda;
+            border: 3px solid #28a745;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .no-traps h2 {
+            color: #155724;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Smart NBA Same-Game Parlay Builder</h1>
+        <p class="subtitle">Learns from real bets • Detects role player traps</p>
+
+        <div class="game-selector">
+            <div class="input-group">
+                <select id="gameSelect" style="flex: 2;">
+                    <option value="">Loading today's games...</option>
+                </select>
+                
+                <button id="generateBtn" onclick="generateSGP()">Generate Smart SGP</button>
+                <button onclick="loadGames()" style="background: #6c757d;">🔄 Refresh Games</button>
+            </div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            ⏳ Analyzing players and detecting role player traps...
+        </div>
+
+        <div id="results" style="display: none;">
+            <div id="trapsSection"></div>
+            <div id="correlationsSection"></div>
+            <div id="recommendationsSection"></div>
+        </div>
+    </div>
+
+    <script>
+        let todaysGames = [];
+
+        // Load today's games on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadGames();
+        });
+
+        async function loadGames() {
+            const gameSelect = document.getElementById('gameSelect');
+            gameSelect.innerHTML = '<option value="">Loading today\'s games...</option>';
+
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const response = await fetch(`/api/nba/games?date=${today}`);
+                const data = await response.json();
+
+                if (data.games && data.games.length > 0) {
+                    todaysGames = data.games;
+                    gameSelect.innerHTML = '<option value="">Select a game...</option>';
+                    
+                    data.games.forEach((game, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = `${game.awayTeam.name} @ ${game.homeTeam.name} - ${game.status.detail}`;
+                        gameSelect.appendChild(option);
+                    });
+                } else {
+                    gameSelect.innerHTML = '<option value="">No games today</option>';
+                }
+            } catch (error) {
+                console.error('Error loading games:', error);
+                gameSelect.innerHTML = '<option value="">Error loading games</option>';
+            }
+        }
+
+        async function generateSGP() {
+            const gameSelect = document.getElementById('gameSelect');
+            const selectedIndex = gameSelect.value;
+
+            if (!selectedIndex || selectedIndex === '') {
+                alert('Please select a game!');
+                return;
+            }
+
+            const game = todaysGames[selectedIndex];
+            const homeTeam = game.homeTeam.code;
+            const awayTeam = game.awayTeam.code;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('generateBtn').disabled = true;
+
+            try {
+                const response = await fetch(`/api/nba/smart-sgp?homeTeam=${homeTeam}&awayTeam=${awayTeam}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    alert('Error: ' + data.message);
+                    return;
+                }
+
+                displayResults(data);
+
+            } catch (error) {
+                alert('Error generating SGP: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('generateBtn').disabled = false;
+            }
+        }
+
+        function displayResults(data) {
+            // Role Player Traps
+            const trapsHtml = data.rolePlayerTraps.length > 0 
+                ? `
+                    <div class="role-player-traps">
+                        <h2>⚠️ Role Player Traps Detected (${data.rolePlayerTraps.length})</h2>
+                        <p style="margin-bottom: 15px;">These props are similar to the Zubac 15+ Points trap - avoid them!</p>
+                        ${data.rolePlayerTraps.map(trap => `
+                            <div class="trap-item">
+                                <div class="player-name">${trap.player} (${trap.team}) - ${trap.propType}</div>
+                                <div class="warning">${trap.warning}</div>
+                                <div class="alternative">💡 ${trap.alternative}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `
+                : `
+                    <div class="no-traps">
+                        <h2>✅ No Role Player Traps Detected!</h2>
+                        <p>All props are from PRIMARY or SECONDARY scorers - safe to build parlays.</p>
+                    </div>
+                `;
+
+            // Correlations
+            const correlationsHtml = data.correlations.length > 0
+                ? `
+                    <div class="correlations">
+                        <h2 style="margin-bottom: 15px;">🔗 Correlations Detected</h2>
+                        ${data.correlations.map(corr => `
+                            <div class="correlation-item">
+                                <strong>${corr.type.replace(/_/g, ' ')}</strong>
+                                <p>${corr.reasoning}</p>
+                                ${corr.warning ? `<p style="color: #856404; margin-top: 5px;">${corr.warning}</p>` : ''}
+                                <p style="margin-top: 8px; font-size: 0.9em; color: #666;">Props: ${corr.props.join(', ')}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                `
+                : '';
+
+            // Recommendations
+            const recs = data.recommendations;
+            const recommendationsHtml = `
+                <div class="recommendations">
+                    ${createParlayCard('conservative', recs.conservative)}
+                    ${createParlayCard('balanced', recs.balanced)}
+                    ${createParlayCard('aggressive', recs.aggressive)}
+                </div>
+            `;
+
+            document.getElementById('trapsSection').innerHTML = trapsHtml;
+            document.getElementById('correlationsSection').innerHTML = correlationsHtml;
+            document.getElementById('recommendationsSection').innerHTML = recommendationsHtml;
+            document.getElementById('results').style.display = 'block';
+        }
+
+        function createParlayCard(type, parlay) {
+            const emoji = parlay.emoji;
+            const title = parlay.type;
+            
+            return `
+                <div class="parlay-card ${type}">
+                    <div class="parlay-header">
+                        <div class="parlay-title">${emoji} ${title}</div>
+                        <div class="parlay-odds">${parlay.estimatedOdds}</div>
+                    </div>
+                    
+                    <div class="hit-rate">
+                        Estimated Hit Rate: <strong>${parlay.hitRate}</strong>
+                    </div>
+                    
+                    <div class="parlay-reasoning">
+                        ${parlay.reasoning}
+                    </div>
+                    
+                    <div style="margin-bottom: 10px; font-weight: bold; color: #666;">
+                        ${parlay.legs.length} Legs:
+                    </div>
+                    
+                    ${parlay.legs.map((leg, i) => `
+                        <div class="leg">
+                            <div class="leg-info">
+                                <div class="player-name-leg">
+                                    ${i + 1}. ${leg.player}
+                                    <span class="usage-tier tier-${leg.usageTier.toLowerCase()}">${leg.usageTier}</span>
+                                </div>
+                                <div class="prop-line">
+                                    ${leg.propType} ${leg.pick} ${leg.line} (Proj: ${leg.projection})
+                                </div>
+                            </div>
+                            <div class="confidence-badge confidence-${getConfidenceClass(leg.confidence)}">
+                                ${Math.round(leg.confidence)}%
+                            </div>
+                        </div>
+                    `).join('')}
+                    
+                    ${parlay.warnings.length > 0 ? `
+                        <div class="warnings-section">
+                            <strong>⚠️ Warnings:</strong>
+                            ${parlay.warnings.map(w => `
+                                <div class="warning-item">${w.message}</div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function getConfidenceClass(confidence) {
+            if (confidence >= 70) return 'high';
+            if (confidence >= 55) return 'medium';
+            return 'low';
+        }
+    </script>
+</body>
+</html>

@@ -5,7 +5,10 @@ const axios = require('axios');
 const nflRealPlayers = require('./realPlayers');
 const { scrapeNFLInjuries, isPlayerOut } = require('./injuryScraper');
 const { nbaTeams, espnNBATeamIds } = require('./nba-data');
-const { getNBAPlayerStats, getNBATeamStats, getNBAInjuries, getActiveNBAPlayers, generateNBAProjection } = require('./nba-stats');
+const { getNBAPlayerStats, getNBATeamStats, getNBAInjuries, getActiveNBAPlayers, generateNBAProjection, clearInjuryCache, getNBAPlayerGameLog, getLast6GameAveragesForTeams } = require('./nba-stats');
+const { generateSmartParlays, formatParlayForDisplay } = require('./parlay-builder');
+const { generateSGPPicks, getPlayerUsageTier } = require('./sgp-builder');
+const { fetchDKNBAGames, fetchDKNFLGames, mapDKTeamToCode } = require('./draftkings-scraper');
 
 // Use PostgreSQL on Vercel, SQLite locally
 const db = process.env.POSTGRES_URL 
@@ -1428,9 +1431,11 @@ async function fetchNBAGames(dateStr) {
     const data = response.data;
     
     if (!data.events || data.events.length === 0) {
+      console.log(`⚠️  No NBA games found for ${dateStr}`);
       return [];
     }
     
+    console.log(`📊 ESPN API returned ${data.events.length} NBA games for ${dateStr}`);
     const games = [];
     
     for (const event of data.events) {
@@ -1438,13 +1443,31 @@ async function fetchNBAGames(dateStr) {
       const homeTeam = competition.competitors.find(t => t.homeAway === 'home');
       const awayTeam = competition.competitors.find(t => t.homeAway === 'away');
       
-      if (!homeTeam || !awayTeam) continue;
+      if (!homeTeam || !awayTeam) {
+        console.log(`⚠️  Skipping game: missing home or away team`);
+        continue;
+      }
       
-      const homeCode = homeTeam.team.abbreviation;
-      const awayCode = awayTeam.team.abbreviation;
+      let homeCode = homeTeam.team.abbreviation;
+      let awayCode = awayTeam.team.abbreviation;
+      
+      // ESPN uses different abbreviations - map them to our codes
+      const espnAliases = {
+        'GS': 'GSW',
+        'NO': 'NOP',
+        'SA': 'SAS',
+        'NY': 'NYK'
+      };
+      
+      homeCode = espnAliases[homeCode] || homeCode;
+      awayCode = espnAliases[awayCode] || awayCode;
       
       // Skip if we don't have these teams
-      if (!nbaTeams[homeCode] || !nbaTeams[awayCode]) continue;
+      if (!nbaTeams[homeCode] || !nbaTeams[awayCode]) {
+        console.log(`⚠️  Skipping ${awayCode} @ ${homeCode}: team code not in database`);
+        console.log(`     Available codes: ${Object.keys(nbaTeams).join(', ')}`);
+        continue;
+      }
       
       games.push({
         id: event.id,
@@ -2521,10 +2544,21 @@ app.get('/api/same-game-parlay', async (req, res) => {
 // NBA Same-Game Parlay Generator
 app.get('/api/nba/same-game-parlay', async (req, res) => {
   try {
-    const { homeTeam, awayTeam, gameId, gameDate } = req.query;
+    const { homeTeam, awayTeam, gameId, gameDate, statsMode = 'weighted' } = req.query;
     
     if (!homeTeam || !awayTeam) {
       return res.status(400).json({ error: 'homeTeam and awayTeam parameters required' });
+    }
+    
+    // Clear injury cache to get fresh data on each parlay generation
+    clearInjuryCache();
+    console.log('🔄 Cleared injury cache for fresh data');
+    console.log(`📊 Stats Mode: ${statsMode === 'weighted' ? 'Last 6 Games (70%) + Season (30%)' : '100% Season Average'}`);
+    
+    // Fetch last 6 game averages only if using weighted mode
+    let last6Stats = null;
+    if (statsMode === 'weighted') {
+      last6Stats = await getLast6GameAveragesForTeams([homeTeam, awayTeam]);
     }
     
     // Get all NBA player stats
@@ -2708,72 +2742,340 @@ app.get('/api/nba/same-game-parlay', async (req, res) => {
       }
     }
     
-    // Generate multiple parlay strategies (same as NFL)
-    const highConfProps = props.filter(p => p.confidence === 'High' && p.recommendation !== 'PASS');
-    const mediumConfProps = props.filter(p => p.confidence === 'Medium' && p.recommendation !== 'PASS');
+    // Add projection field to all props for smart parlay builder
+    const propsWithProjections = props.map(p => ({
+      ...p,
+      projection: p.line, // Use line as projection for now
+      edge: Math.abs(p.line - (p.over || p.line))
+    }));
+    
+    // Get game prediction for context
+    let gamePrediction;
+    try {
+      gamePrediction = await calculateNBAWinProbability(homeTeam, awayTeam, gameId);
+    } catch (error) {
+      console.log('Could not get game prediction, using defaults');
+      gamePrediction = {
+        team1Score: 110,
+        team2Score: 110,
+        spread: 0
+      };
+    }
+    
+    // Build game context for correlation logic
+    const gameContext = {
+      homeTeam,
+      awayTeam,
+      projectedTotal: (gamePrediction.team1Score || 110) + (gamePrediction.team2Score || 110),
+      spread: gamePrediction.spread || 0,
+      pace: (parseFloat(homeStats.pace) + parseFloat(awayStats.pace)) / 2
+    };
+    
+    // 🔥 GENERATE SMART PARLAYS WITH CORRELATION LOGIC
+    const smartParlays = generateSmartParlays(propsWithProjections, gameContext);
+    
+    // Format parlays for display (assuming $1000 bankroll, adjustable)
+    const bankroll = 1000;
+    const formattedParlays = {
+      safe: formatParlayForDisplay(smartParlays.safe, bankroll),
+      balanced: formatParlayForDisplay(smartParlays.balanced, bankroll),
+      moonshot: formatParlayForDisplay(smartParlays.moonshot, bankroll)
+    };
+    
+    // Legacy format for backward compatibility
     const allGoodProps = props.filter(p => p.recommendation !== 'PASS' && p.confidence !== 'Low');
-    
-    // Strategy 1: Conservative
-    const conservativeParlay = highConfProps.slice(0, 5);
-    const conservativeOdds = conservativeParlay.length > 0 ? `+${Math.round(Math.pow(1.83, conservativeParlay.length) * 100)}` : 'N/A';
-    
-    // Strategy 2: Balanced
-    const balancedParlay = [];
-    balancedParlay.push(...highConfProps.slice(0, 3), ...mediumConfProps.slice(0, 3));
-    const balancedOdds = balancedParlay.length > 0 ? `+${Math.round(Math.pow(1.83, balancedParlay.length) * 100)}` : 'N/A';
-    
-    // Strategy 3: Aggressive
-    const valueProps = allGoodProps.map(p => {
-      const edge = p.recommendation === 'OVER' ? p.line - p.over : p.over - p.line;
-      return { ...p, edge };
-    }).sort((a, b) => b.edge - a.edge).slice(0, 8);
-    const aggressiveOdds = valueProps.length > 0 ? `+${Math.round(Math.pow(1.83, valueProps.length) * 100)}` : 'N/A';
-    
-    // Strategy 4: Risky Value (3PM + big scoring nights)
-    const riskyParlay = [];
-    const threePtProps = allGoodProps.filter(p => p.prop === '3-Pointers Made');
-    const bigScoringProps = allGoodProps.filter(p => p.prop === 'Points' && p.line >= 25);
-    riskyParlay.push(...threePtProps.slice(0, 2), ...bigScoringProps.slice(0, 3));
-    const riskyOdds = riskyParlay.length > 0 ? `+${Math.round(Math.pow(1.83, riskyParlay.length) * 100)}` : 'N/A';
-    
-    const suggestedParlay = balancedParlay.length > 0 ? balancedParlay : conservativeParlay;
+    const suggestedParlay = smartParlays.balanced.legs.length > 0 ? smartParlays.balanced.legs : smartParlays.safe.legs;
     
     res.json({
       game: `${awayTeam} @ ${homeTeam}`,
+      gameContext: {
+        projectedTotal: gameContext.projectedTotal,
+        spread: gameContext.spread,
+        pace: gameContext.pace.toFixed(1)
+      },
       allProps: props,
+      
+      // 🔥 NEW SMART PARLAYS
+      smartParlays: formattedParlays,
+      correlations: smartParlays.allCorrelations,
+      
+      // Legacy support
       suggestedParlay: suggestedParlay,
-      parlayOdds: suggestedParlay.length > 0 ? `+${Math.round(Math.pow(1.83, suggestedParlay.length) * 100)}` : 'N/A',
+      parlayOdds: smartParlays.balanced.odds,
+      
+      // Keep old strategies for comparison
       parlayStrategies: {
-        conservative: {
-          name: 'Conservative (High Confidence Only)',
-          picks: conservativeParlay,
-          odds: conservativeOdds,
-          description: `${conservativeParlay.length} legs - Lower risk, all high confidence picks`
-        },
-        balanced: {
-          name: 'Balanced (High + Medium Mix)',
-          picks: balancedParlay,
-          odds: balancedOdds,
-          description: `${balancedParlay.length} legs - Best balance of risk and reward`
-        },
-        aggressive: {
-          name: 'Aggressive (Best Value Picks)',
-          picks: valueProps,
-          odds: aggressiveOdds,
-          description: `${valueProps.length} legs - Higher payout, more risk`
-        },
-        risky: {
-          name: 'Risky Value (3PT Heavy)',
-          picks: riskyParlay,
-          odds: riskyOdds,
-          description: `${riskyParlay.length} legs - 3-pointers + big scoring nights, high risk/reward`
-        }
+        safe: formattedParlays.safe,
+        balanced: formattedParlays.balanced,
+        moonshot: formattedParlays.moonshot
       }
     });
     
   } catch (error) {
     console.error('NBA Same-game parlay error:', error);
     res.status(500).json({ error: 'Failed to generate NBA parlay', message: error.message });
+  }
+});
+
+// 🎯 NEW NBA SMART SGP GENERATOR WITH ROLE PLAYER TRAP DETECTION
+app.get('/api/nba/smart-sgp', async (req, res) => {
+  try {
+    const { homeTeam, awayTeam, gameId, gameDate, statsMode = 'weighted' } = req.query;
+    
+    if (!homeTeam || !awayTeam) {
+      return res.status(400).json({ error: 'homeTeam and awayTeam parameters required' });
+    }
+    
+    console.log(`🎯 Generating SMART SGP for ${awayTeam} @ ${homeTeam}`);
+    console.log(`📊 Stats Mode: ${statsMode === 'weighted' ? 'Last 6 Games (70%) + Season (30%)' : '100% Season Average'}`);
+    
+    // Clear injury cache to get fresh data on each parlay generation
+    clearInjuryCache();
+    console.log('🔄 Cleared injury cache for fresh data');
+    
+    // Fetch last 6 game averages only if using weighted mode
+    let last6Stats = null;
+    if (statsMode === 'weighted') {
+      last6Stats = await getLast6GameAveragesForTeams([homeTeam, awayTeam]);
+    }
+    
+    // Get active players for both teams (filtered by injuries and minutes)
+    // Will use 70/30 weighting if last6Stats provided, otherwise 100% season
+    const homeActivePlayers = await getActiveNBAPlayers(homeTeam, 5, 15, last6Stats);
+    const awayActivePlayers = await getActiveNBAPlayers(awayTeam, 5, 15, last6Stats);
+    
+    console.log(`  ✓ ${homeActivePlayers.length} active home players`);
+    console.log(`  ✓ ${awayActivePlayers.length} active away players`);
+    
+    if (homeActivePlayers.length === 0 || awayActivePlayers.length === 0) {
+      return res.status(404).json({ 
+        error: 'No active players found',
+        message: 'Unable to generate SGP - check team codes or player data'
+      });
+    }
+    
+    // Get team stats for projections
+    const homeStats = await getNBATeamStats(homeTeam);
+    const awayStats = await getNBATeamStats(awayTeam);
+    
+    // Generate projections for each player
+    const homePlayersWithProjections = homeActivePlayers.map(player => ({
+      ...player,
+      team: homeTeam,
+      projection: generateNBAProjection(player, awayStats, true)
+    }));
+    
+    const awayPlayersWithProjections = awayActivePlayers.map(player => ({
+      ...player,
+      team: awayTeam,
+      projection: generateNBAProjection(player, homeStats, false)
+    }));
+    
+    // Get game prediction for context
+    let gamePrediction;
+    try {
+      gamePrediction = await calculateNBAWinProbability(homeTeam, awayTeam, gameId);
+    } catch (error) {
+      console.log('  ⚠️  Could not get game prediction, using defaults');
+      gamePrediction = {
+        team1Score: 110,
+        team2Score: 110,
+        spread: 0
+      };
+    }
+    
+    // Build game context
+    const gameContext = {
+      homeTeam,
+      awayTeam,
+      team1Code: homeTeam,
+      team2Code: awayTeam,
+      projectedTotal: (gamePrediction.team1Score || 110) + (gamePrediction.team2Score || 110),
+      spread: gamePrediction.spread || 0,
+      pace: (parseFloat(homeStats.pace) + parseFloat(awayStats.pace)) / 2
+    };
+    
+    console.log(`  ✓ Game context: Total ${gameContext.projectedTotal}, Pace ${gameContext.pace.toFixed(1)}`);
+    
+    // 🔥 GENERATE SMART SGP PICKS WITH ROLE PLAYER TRAP DETECTION
+    const sgpAnalysis = generateSGPPicks(
+      homePlayersWithProjections,
+      awayPlayersWithProjections,
+      gameContext
+    );
+    
+    console.log(`  ✓ Generated ${sgpAnalysis.allProps.length} total props`);
+    console.log(`  ✓ ${sgpAnalysis.safeProps.length} safe props (no stretch lines)`);
+    console.log(`  ✓ ${sgpAnalysis.correlations.length} correlations detected`);
+    
+    // Count role player traps
+    const rolePlayerTraps = sgpAnalysis.allProps.filter(p => p.isStretch);
+    if (rolePlayerTraps.length > 0) {
+      console.log(`  ⚠️  ${rolePlayerTraps.length} ROLE PLAYER TRAPS detected:`);
+      rolePlayerTraps.forEach(trap => {
+        console.log(`     - ${trap.player}: ${trap.warning}`);
+      });
+    }
+    
+    res.json({
+      game: `${awayTeam} @ ${homeTeam}`,
+      gameDate: gameDate || 'Today',
+      
+      gameContext: {
+        projectedTotal: Math.round(gameContext.projectedTotal),
+        spread: Math.round(gameContext.spread),
+        pace: Math.round(gameContext.pace)
+      },
+      
+      // All props with usage tiers and confidence
+      allProps: sgpAnalysis.allProps.map(p => ({
+        playerId: p.playerId,
+        player: p.player,
+        team: p.team,
+        propType: p.propType,
+        line: p.line,
+        pick: p.pick,
+        projection: Math.round(p.projection * 10) / 10,
+        seasonAvg: Math.round(p.seasonAvg * 10) / 10,
+        confidence: Math.round(p.confidence),
+        usageTier: p.usageTier.tier,
+        tierDescription: p.usageTier.description,
+        safetyRating: p.usageTier.safetyRating,
+        edge: Math.round(p.edge * 10) / 10,
+        isStretch: p.isStretch,
+        warning: p.warning || null,
+        alternative: p.alternative || null
+      })),
+      
+      // Safe props only (no stretch lines)
+      safeProps: sgpAnalysis.safeProps.map(p => ({
+        player: p.player,
+        team: p.team,
+        propType: p.propType,
+        line: p.line,
+        pick: p.pick,
+        projection: Math.round(p.projection * 10) / 10,
+        confidence: Math.round(p.confidence),
+        usageTier: p.usageTier.tier
+      })),
+      
+      // Correlation analysis
+      correlations: sgpAnalysis.correlations.map(c => ({
+        type: c.type,
+        confidence: c.confidence,
+        reasoning: c.reasoning,
+        warning: c.warning,
+        props: c.props.map(p => `${p.player} ${p.propType} ${p.pick}`)
+      })),
+      
+      // 🔥 THREE SGP RECOMMENDATIONS
+      recommendations: {
+        conservative: {
+          ...sgpAnalysis.recommendations.conservative,
+          legs: sgpAnalysis.recommendations.conservative.legs.map(l => ({
+            playerId: l.playerId,
+            player: l.player,
+            team: l.team,
+            propType: l.propType,
+            line: l.line,
+            pick: l.pick,
+            projection: Math.round(l.projection * 10) / 10,
+            confidence: Math.round(l.confidence),
+            usageTier: l.usageTier.tier
+          }))
+        },
+        balanced: {
+          ...sgpAnalysis.recommendations.balanced,
+          legs: sgpAnalysis.recommendations.balanced.legs.map(l => ({
+            playerId: l.playerId,
+            player: l.player,
+            team: l.team,
+            propType: l.propType,
+            line: l.line,
+            pick: l.pick,
+            projection: Math.round(l.projection * 10) / 10,
+            confidence: Math.round(l.confidence),
+            usageTier: l.usageTier.tier
+          }))
+        },
+        aggressive: {
+          ...sgpAnalysis.recommendations.aggressive,
+          legs: sgpAnalysis.recommendations.aggressive.legs.map(l => ({
+            playerId: l.playerId,
+            player: l.player,
+            team: l.team,
+            propType: l.propType,
+            line: l.line,
+            pick: l.pick,
+            projection: Math.round(l.projection * 10) / 10,
+            confidence: Math.round(l.confidence),
+            usageTier: l.usageTier.tier
+          }))
+        }
+      },
+      
+      // Role player traps detected
+      rolePlayerTraps: rolePlayerTraps.map(trap => ({
+        player: trap.player,
+        team: trap.team,
+        propType: trap.propType,
+        line: trap.line,
+        seasonAvg: Math.round(trap.seasonAvg * 10) / 10,
+        usageTier: trap.usageTier.tier,
+        warning: trap.warning,
+        alternative: trap.alternative
+      })),
+      
+      // Summary stats
+      summary: {
+        totalProps: sgpAnalysis.allProps.length,
+        safeProps: sgpAnalysis.safeProps.length,
+        rolePlayerTraps: rolePlayerTraps.length,
+        correlationsDetected: sgpAnalysis.correlations.length,
+        recommendedBet: sgpAnalysis.recommendations.balanced.legs.length > 0 
+          ? 'BALANCED' 
+          : 'CONSERVATIVE'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Smart SGP error:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate smart SGP', 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// NBA Player Game Log endpoint - Last 6 games
+app.get('/api/nba/player-gamelog', async (req, res) => {
+  try {
+    const { player, team } = req.query;
+    
+    if (!player || !team) {
+      return res.status(400).json({ error: 'player and team parameters required' });
+    }
+    
+    console.log(`📊 Fetching game log for ${player} (${team})`);
+    
+    // Fetch actual last 6 games from NBA API
+    const gameLog = await getNBAPlayerGameLog(player, team);
+    
+    if (!gameLog) {
+      return res.status(404).json({ error: 'Player not found or no game data available' });
+    }
+    
+    res.json({
+      player: player,
+      team: team,
+      games: gameLog.games,
+      averages: gameLog.averages
+    });
+    
+  } catch (error) {
+    console.error('❌ Player game log error:', error);
+    res.status(500).json({ error: 'Failed to fetch player game log' });
   }
 });
 
@@ -3295,6 +3597,156 @@ app.get('/api/accuracy', async (req, res) => {
   }
 });
 
+// DraftKings Roster & Props API Endpoints
+app.get('/api/draftkings/nba', async (req, res) => {
+  const { date } = req.query;
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  
+  try {
+    console.log(`🏀 Fetching DraftKings NBA rosters for ${dateStr}...`);
+    const games = await fetchDKNBAGames(dateStr);
+    res.json({ date: dateStr, games, source: 'DraftKings' });
+  } catch (error) {
+    console.error('DraftKings NBA API error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch DraftKings NBA data', message: error.message });
+  }
+});
+
+app.get('/api/draftkings/nfl', async (req, res) => {
+  const { date } = req.query;
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  
+  try {
+    console.log(`🏈 Fetching DraftKings NFL rosters for ${dateStr}...`);
+    const games = await fetchDKNFLGames(dateStr);
+    res.json({ date: dateStr, games, source: 'DraftKings' });
+  } catch (error) {
+    console.error('DraftKings NFL API error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch DraftKings NFL data', message: error.message });
+  }
+});
+
+// Get combined ESPN games + DraftKings rosters for NBA
+app.get('/api/nba/games-with-rosters', async (req, res) => {
+  const { date } = req.query;
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  
+  try {
+    console.log(`🏀 Fetching NBA games with DraftKings rosters for ${dateStr}...`);
+    
+    // Fetch from both ESPN (for game info) and DraftKings (for rosters)
+    const [espnGames, dkGames] = await Promise.all([
+      fetchNBAGames(dateStr),
+      fetchDKNBAGames(dateStr)
+    ]);
+    
+    console.log(`✓ Got ${espnGames.length} ESPN games and ${dkGames.length} DK games`);
+    
+    // Default lines structure
+    const defaultLines = {
+      spread: { home: null, away: null },
+      moneyline: { home: null, away: null },
+      total: { over: null, under: null, line: null }
+    };
+    
+    // Merge the data - match by team names
+    const gamesWithRosters = espnGames.map(espnGame => {
+      const dkGame = dkGames.find(dk => {
+        if (!dk || !dk.homeTeam || !dk.awayTeam) return false;
+        const dkHomeCode = mapDKTeamToCode(dk.homeTeam.name);
+        const dkAwayCode = mapDKTeamToCode(dk.awayTeam.name);
+        const homeMatch = dkHomeCode === espnGame.homeTeam.code;
+        const awayMatch = dkAwayCode === espnGame.awayTeam.code;
+        
+        if (homeMatch && awayMatch) {
+          console.log(`  ✓ Matched: ${dk.awayTeam.name} @ ${dk.homeTeam.name}`);
+        }
+        
+        return homeMatch && awayMatch;
+      });
+      
+      if (!dkGame) {
+        console.log(`  ⚠️  No DK match for: ${espnGame.awayTeam.code} @ ${espnGame.homeTeam.code}`);
+      }
+      
+      return {
+        ...espnGame,
+        homeTeam: {
+          ...espnGame.homeTeam,
+          roster: dkGame?.homeTeam?.roster || [],
+          injuries: dkGame?.homeTeam?.injuries || []
+        },
+        awayTeam: {
+          ...espnGame.awayTeam,
+          roster: dkGame?.awayTeam?.roster || [],
+          injuries: dkGame?.awayTeam?.injuries || []
+        },
+        lines: dkGame?.lines || defaultLines,
+        playerProps: dkGame?.playerProps || []
+      };
+    });
+    
+    res.json({ date: dateStr, games: gamesWithRosters, source: 'ESPN + DraftKings' });
+  } catch (error) {
+    console.error('Error fetching NBA games with rosters:', error.message);
+    res.status(500).json({ error: 'Failed to fetch NBA games with rosters', message: error.message });
+  }
+});
+
+// Get combined ESPN games + DraftKings rosters for NFL
+app.get('/api/nfl/games-with-rosters', async (req, res) => {
+  const { date } = req.query;
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  
+  try {
+    console.log(`🏈 Fetching NFL games with DraftKings rosters for ${dateStr}...`);
+    
+    // Fetch from both ESPN (for game info) and DraftKings (for rosters)
+    const [espnGames, dkGames] = await Promise.all([
+      fetchNFLGames(dateStr),
+      fetchDKNFLGames(dateStr)
+    ]);
+    
+    // Default lines structure
+    const defaultLines = {
+      spread: { home: null, away: null },
+      moneyline: { home: null, away: null },
+      total: { over: null, under: null, line: null }
+    };
+    
+    // Merge the data - match by team names
+    const gamesWithRosters = espnGames.map(espnGame => {
+      const dkGame = dkGames.find(dk => {
+        if (!dk || !dk.homeTeam || !dk.awayTeam) return false;
+        const homeMatch = mapDKTeamToCode(dk.homeTeam.name) === espnGame.homeTeam.code;
+        const awayMatch = mapDKTeamToCode(dk.awayTeam.name) === espnGame.awayTeam.code;
+        return homeMatch && awayMatch;
+      });
+      
+      return {
+        ...espnGame,
+        homeTeam: {
+          ...espnGame.homeTeam,
+          roster: dkGame?.homeTeam?.roster || [],
+          injuries: dkGame?.homeTeam?.injuries || []
+        },
+        awayTeam: {
+          ...espnGame.awayTeam,
+          roster: dkGame?.awayTeam?.roster || [],
+          injuries: dkGame?.awayTeam?.injuries || []
+        },
+        lines: dkGame?.lines || defaultLines,
+        playerProps: dkGame?.playerProps || []
+      };
+    });
+    
+    res.json({ date: dateStr, games: gamesWithRosters, source: 'ESPN + DraftKings' });
+  } catch (error) {
+    console.error('Error fetching NFL games with rosters:', error.message);
+    res.status(500).json({ error: 'Failed to fetch NFL games with rosters', message: error.message });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -3327,6 +3779,7 @@ async function startServer() {
     console.log('🏀 Pre-loading NBA player stats...');
     getNBAPlayerStats().then(() => {
       console.log('✅ NBA player stats loaded and cached');
+      console.log('📊 Last 6 games will be fetched per-game when generating parlays (70% weight)');
     }).catch(err => {
       console.warn('⚠️  NBA stats pre-load failed, will load on demand');
     });

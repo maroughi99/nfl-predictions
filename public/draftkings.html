@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DraftKings Roster Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .controls label {
+            display: inline-block;
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        
+        .controls input {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        
+        .controls button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            margin: 50px 0;
+        }
+        
+        .game-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+        }
+        
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #f0f0f0;
+        }
+        
+        .matchup {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .game-info {
+            text-align: right;
+            color: #666;
+        }
+        
+        .lines {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .line-item {
+            flex: 1;
+            text-align: center;
+        }
+        
+        .line-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .line-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .teams {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        
+        .team {
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+        }
+        
+        .team-header {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .away-team .team-header {
+            color: #dc3545;
+        }
+        
+        .home-team .team-header {
+            color: #007bff;
+        }
+        
+        .roster {
+            margin-bottom: 20px;
+        }
+        
+        .roster-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #666;
+        }
+        
+        .player {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .player-name {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+        
+        .player-position {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .props {
+            display: grid;
+            gap: 5px;
+        }
+        
+        .prop {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px;
+            background: white;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        
+        .prop-type {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .prop-line {
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .prop-odds {
+            color: #666;
+            font-size: 0.85em;
+        }
+        
+        .injuries {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .injuries-title {
+            font-weight: bold;
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        
+        .injury {
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        
+        .injury-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .injury-status {
+            color: #dc3545;
+            font-size: 0.9em;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 50px;
+            color: white;
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏀 DraftKings Roster & Props Viewer</h1>
+        
+        <div class="controls">
+            <label for="sport">Sport:</label>
+            <select id="sport">
+                <option value="nba">NBA 🏀</option>
+                <option value="nfl">NFL 🏈</option>
+            </select>
+            
+            <label for="date">Date:</label>
+            <input type="date" id="date">
+            
+            <button onclick="loadGames()">Load Games</button>
+            <button onclick="loadToday()">Today's Games</button>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            Loading DraftKings data...
+        </div>
+        
+        <div id="games-container"></div>
+        
+        <div id="no-data" class="no-data" style="display: none;">
+            No games found for this date. Try a different date or check back later.
+        </div>
+    </div>
+
+    <script>
+        // Set today's date as default
+        document.getElementById('date').valueAsDate = new Date();
+        
+        function loadToday() {
+            document.getElementById('date').valueAsDate = new Date();
+            loadGames();
+        }
+        
+        async function loadGames() {
+            const sport = document.getElementById('sport').value;
+            const date = document.getElementById('date').value;
+            
+            const loading = document.getElementById('loading');
+            const container = document.getElementById('games-container');
+            const noData = document.getElementById('no-data');
+            
+            loading.style.display = 'block';
+            container.innerHTML = '';
+            noData.style.display = 'none';
+            
+            try {
+                const response = await fetch(`/api/${sport}/games-with-rosters?date=${date}`);
+                const data = await response.json();
+                
+                console.log('API Response:', data);  // DEBUG
+                
+                loading.style.display = 'none';
+                
+                if (!data.games || data.games.length === 0) {
+                    noData.style.display = 'block';
+                    return;
+                }
+                
+                // Render games
+                data.games.forEach(game => {
+                    console.log('Processing game:', game);  // DEBUG
+                    const gameCard = createGameCard(game);
+                    container.appendChild(gameCard);
+                });
+                
+            } catch (error) {
+                loading.style.display = 'none';
+                container.innerHTML = `<div class="no-data">Error loading data: ${error.message}</div>`;
+            }
+        }
+        
+        function createGameCard(game) {
+            const card = document.createElement('div');
+            card.className = 'game-card';
+            
+            const gameTime = new Date(game.date).toLocaleString();
+            
+            card.innerHTML = `
+                <div class="game-header">
+                    <div class="matchup">${game.awayTeam.name} @ ${game.homeTeam.name}</div>
+                    <div class="game-info">
+                        <div>${gameTime}</div>
+                        <div>${game.venue || 'TBD'}</div>
+                    </div>
+                </div>
+                
+                ${game.lines ? createLinesHTML(game.lines) : ''}
+                
+                <div class="teams">
+                    <div class="team away-team">
+                        ${createTeamHTML(game.awayTeam, 'Away')}
+                    </div>
+                    <div class="team home-team">
+                        ${createTeamHTML(game.homeTeam, 'Home')}
+                    </div>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        function createLinesHTML(lines) {
+            if (!lines) return '';
+            
+            // Format spreads with odds
+            let homeSpread = 'N/A';
+            let awaySpread = 'N/A';
+            if (lines.spread?.home !== null) {
+                homeSpread = `${lines.spread.home > 0 ? '+' : ''}${lines.spread.home} (${formatOdds(lines.spread.homeOdds || -110)})`;
+                awaySpread = `${lines.spread.away > 0 ? '+' : ''}${lines.spread.away} (${formatOdds(lines.spread.awayOdds || -110)})`;
+            }
+            
+            // Format moneylines
+            const homeMoneyline = lines.moneyline?.home ? formatOdds(lines.moneyline.home) : 'N/A';
+            const awayMoneyline = lines.moneyline?.away ? formatOdds(lines.moneyline.away) : 'N/A';
+            
+            // Format total
+            const total = lines.total?.line ? `${lines.total.line} (O:${formatOdds(lines.total.over || -110)} U:${formatOdds(lines.total.under || -110)})` : 'N/A';
+            
+            return `
+                <div class="lines">
+                    <div class="line-item">
+                        <div class="line-label">Spread (Away/Home)</div>
+                        <div class="line-value" style="font-size: 1.1em;">${awaySpread} / ${homeSpread}</div>
+                    </div>
+                    <div class="line-item">
+                        <div class="line-label">Moneyline (Away/Home)</div>
+                        <div class="line-value" style="font-size: 1.1em;">${awayMoneyline} / ${homeMoneyline}</div>
+                    </div>
+                    <div class="line-item">
+                        <div class="line-label">Total</div>
+                        <div class="line-value">${total}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function createTeamHTML(team, location) {
+            let html = `
+                <div class="team-header">${team.name} (${location})</div>
+            `;
+            
+            if (team.roster && team.roster.length > 0) {
+                html += `
+                    <div class="roster">
+                        <div class="roster-title">🎯 Active Roster (${team.roster.length} players)</div>
+                `;
+                
+                team.roster.slice(0, 10).forEach(player => {
+                    html += `
+                        <div class="player">
+                            <div class="player-name">${player.name}</div>
+                            <div class="player-position">${player.position}</div>
+                            ${player.props && player.props.length > 0 ? createPropsHTML(player.props) : '<div style="color: #999; font-size: 0.9em;">No props available</div>'}
+                        </div>
+                    `;
+                });
+                
+                if (team.roster.length > 10) {
+                    html += `<div style="text-align: center; color: #666; margin-top: 10px;">+ ${team.roster.length - 10} more players</div>`;
+                }
+                
+                html += `</div>`;
+            } else {
+                html += `<div style="text-align: center; color: #999; padding: 20px;">No roster data available</div>`;
+            }
+            
+            if (team.injuries && team.injuries.length > 0) {
+                html += `
+                    <div class="injuries">
+                        <div class="injuries-title">🚑 Injuries</div>
+                `;
+                
+                team.injuries.forEach(injury => {
+                    html += `
+                        <div class="injury">
+                            <span class="injury-name">${injury.name}</span> - 
+                            <span class="injury-status">${injury.status}</span>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+            }
+            
+            return html;
+        }
+        
+        function createPropsHTML(props) {
+            let html = '<div class="props">';
+            
+            props.forEach(prop => {
+                html += `
+                    <div class="prop">
+                        <span class="prop-type">${prop.type}</span>
+                        <span class="prop-line">${prop.line}</span>
+                        <span class="prop-odds">O:${formatOdds(prop.overOdds)} U:${formatOdds(prop.underOdds)}</span>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            return html;
+        }
+        
+        function formatOdds(odds) {
+            if (!odds) return 'N/A';
+            return odds > 0 ? `+${odds}` : odds;
+        }
+        
+        // Load today's games on page load
+        loadToday();
+    </script>
+</body>
+</html>

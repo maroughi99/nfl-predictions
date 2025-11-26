@@ -17,6 +17,7 @@ let currentSport = 'nfl'; // 'nfl' or 'nba'
 let currentDate = new Date();
 let todaysGames = [];
 let currentPrediction = null;
+let statsMode = 'weighted'; // 'weighted' (70% last 6) or 'season' (100% season)
 
 // Get API endpoint based on current sport
 function getAPIPath(endpoint) {
@@ -52,6 +53,32 @@ function setupEventListeners() {
     // History tab buttons
     document.getElementById('updateResultsBtn')?.addEventListener('click', updateResults);
     document.getElementById('updatePropResultsBtn')?.addEventListener('click', updatePropResults);
+    
+    // Stats mode toggle
+    document.getElementById('statsToggleBtn')?.addEventListener('click', toggleStatsMode);
+}
+
+// Toggle stats mode (weighted vs season)
+function toggleStatsMode() {
+    const btn = document.getElementById('statsToggleBtn');
+    
+    if (statsMode === 'weighted') {
+        statsMode = 'season';
+        btn.dataset.mode = 'season';
+        btn.innerHTML = `
+            <span class="toggle-icon">📈</span>
+            <span class="toggle-text">Season Average (100%)</span>
+        `;
+    } else {
+        statsMode = 'weighted';
+        btn.dataset.mode = 'weighted';
+        btn.innerHTML = `
+            <span class="toggle-icon">📊</span>
+            <span class="toggle-text">Last 6 Games (70%)</span>
+        `;
+    }
+    
+    console.log('🔄 Stats mode changed to:', statsMode);
 }
 
 // Switch sports (NFL <-> NBA)
@@ -1189,6 +1216,73 @@ async function loadParlayGames() {
     }
 }
 
+// Create compact parlay card - DraftKings style
+function createCompactParlayCard(parlay, type) {
+    const typeClass = type === 'recommended' ? 'recommended' : type;
+    const legsHTML = parlay.legs.map((leg, idx) => {
+        // Handle both numeric and string confidence values
+        let confidence = leg.confidence;
+        let confClass = 'low';
+        
+        if (typeof confidence === 'number') {
+            confidence = Math.round(confidence);
+            confClass = confidence >= 70 ? 'high' : confidence >= 55 ? 'medium' : 'low';
+        } else {
+            // String values like 'High', 'Medium', 'Low'
+            confClass = confidence ? confidence.toLowerCase() : 'low';
+            confidence = confClass === 'high' ? 70 : confClass === 'medium' ? 60 : 50;
+        }
+        
+        const playerName = leg.player || leg.playerName || 'Unknown Player';
+        const propType = leg.prop || leg.propType || leg.type || 'Unknown Prop';
+        
+        // Get player headshot from NBA CDN (same as All Player Props)
+        const playerId = leg.playerId || '';
+        const fallbackImage = 'https://cdn.nba.com/headshots/nba/latest/260x190/fallback.png';
+        const playerImage = playerId ? 
+            `https://cdn.nba.com/headshots/nba/latest/1040x760/${playerId}.png` :
+            fallbackImage;
+        
+        return `
+            <div class="compact-leg" onclick="showPlayerStats('${playerName.replace(/'/g, "\\'")}', '${leg.team}', '${propType}')" style="cursor: pointer;">
+                <div class="compact-leg-left">
+                    <img src="${playerImage}" alt="${playerName}" class="compact-leg-avatar" onerror="this.src='${fallbackImage}'">
+                    <div class="compact-leg-info">
+                        <div class="compact-leg-player">${playerName}</div>
+                        <div class="compact-leg-prop">${propType}</div>
+                    </div>
+                </div>
+                <div class="compact-leg-right">
+                    <div class="compact-leg-line">${leg.pick} ${leg.line}</div>
+                    <div class="compact-leg-conf ${confClass}">${confidence}%</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    // Calculate average confidence if not provided
+    const avgConf = parlay.avgConfidence || (parlay.legs.length > 0 ? 
+        Math.round(parlay.legs.reduce((sum, leg) => sum + (leg.confidence || 0), 0) / parlay.legs.length) + '%' : 
+        'N/A');
+    
+    return `
+        <div class="compact-parlay-card ${typeClass}">
+            <div class="compact-parlay-header">
+                <div class="compact-parlay-title">
+                    <h3>${parlay.emoji} ${parlay.type} Parlay</h3>
+                </div>
+            </div>
+            <div class="compact-stats-row">
+                <div class="compact-stat">Hit Rate: <strong>${parlay.hitRate || 'N/A'}</strong></div>
+                <div class="compact-stat">Avg Conf: <strong>${avgConf}</strong></div>
+            </div>
+            <div class="compact-parlay-legs">
+                ${legsHTML}
+            </div>
+        </div>
+    `;
+}
+
 async function generateParlay() {
     const select = document.getElementById('parlayGameSelect');
     const [homeTeam, awayTeam, gameId, gameDate, sport] = select.value.split('|');
@@ -1200,9 +1294,12 @@ async function generateParlay() {
     document.getElementById('parlayResults').style.display = 'none';
     
     try {
-        const endpoint = 'same-game-parlay';
-        const response = await fetch(getAPIPath(`${endpoint}?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}`));
+        // Use correct endpoint based on sport - NBA uses smart SGP builder
+        const endpoint = sport === 'nba' ? 'smart-sgp' : 'same-game-parlay';
+        const response = await fetch(getAPIPath(`${endpoint}?homeTeam=${homeTeam}&awayTeam=${awayTeam}&gameId=${gameId}&gameDate=${gameDate}&statsMode=${statsMode}`));
         const data = await response.json();
+        
+        console.log('🔥 API Response:', data);
         
         // Store sport for createPropCard
         data.sport = sport;
@@ -1211,73 +1308,48 @@ async function generateParlay() {
         const suggestedList = document.getElementById('suggestedParlayList');
         
         let strategiesHTML = '';
-        if (data.parlayStrategies) {
-            // Conservative Strategy
-            if (data.parlayStrategies.conservative.picks.length > 0) {
-                strategiesHTML += `
-                    <div class="parlay-strategy">
-                        <div class="strategy-header">
-                            <h3>🛡️ ${data.parlayStrategies.conservative.name}</h3>
-                        </div>
-                        <p class="strategy-description">${data.parlayStrategies.conservative.description}</p>
-                        <div class="strategy-picks">
-                            ${data.parlayStrategies.conservative.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
-                        </div>
-                    </div>
-                `;
+        
+        // Handle both smartParlays (old) and recommendations (new smart-sgp)
+        const parlays = data.smartParlays || data.recommendations;
+        
+        if (parlays) {
+            console.log('✅ Parlays found:', parlays);
+            
+            // SAFE/CONSERVATIVE PARLAY
+            const safePar = parlays.safe || parlays.conservative;
+            if (safePar && safePar.legs && safePar.legs.length > 0) {
+                strategiesHTML += createCompactParlayCard(safePar, 'safe');
             }
             
-            // Balanced Strategy
-            if (data.parlayStrategies.balanced.picks.length > 0) {
-                strategiesHTML += `
-                    <div class="parlay-strategy recommended">
-                        <div class="strategy-header">
-                            <h3>⚖️ ${data.parlayStrategies.balanced.name} <span class="recommended-badge">RECOMMENDED</span></h3>
-                        </div>
-                        <p class="strategy-description">${data.parlayStrategies.balanced.description}</p>
-                        <div class="strategy-picks">
-                            ${data.parlayStrategies.balanced.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
-                        </div>
-                    </div>
-                `;
+            // BALANCED PARLAY (RECOMMENDED)
+            if (parlays.balanced && parlays.balanced.legs && parlays.balanced.legs.length > 0) {
+                strategiesHTML += createCompactParlayCard(parlays.balanced, 'recommended');
             }
             
-            // Aggressive Strategy
-            if (data.parlayStrategies.aggressive.picks.length > 0) {
-                strategiesHTML += `
-                    <div class="parlay-strategy">
-                        <div class="strategy-header">
-                            <h3>🔥 ${data.parlayStrategies.aggressive.name}</h3>
-                        </div>
-                        <p class="strategy-description">${data.parlayStrategies.aggressive.description}</p>
-                        <div class="strategy-picks">
-                            ${data.parlayStrategies.aggressive.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
-                        </div>
-                    </div>
-                `;
-            }
-            
-            // Risky Value Strategy
-            if (data.parlayStrategies.risky && data.parlayStrategies.risky.picks.length > 0) {
-                strategiesHTML += `
-                    <div class="parlay-strategy risky">
-                        <div class="strategy-header">
-                            <h3>💎 ${data.parlayStrategies.risky.name} <span class="risky-badge">YOLO</span></h3>
-                        </div>
-                        <p class="strategy-description">${data.parlayStrategies.risky.description}</p>
-                        <div class="strategy-picks">
-                            ${data.parlayStrategies.risky.picks.map(prop => createPropCard(prop, true, data.sport)).join('')}
-                        </div>
-                    </div>
-                `;
+            // MOONSHOT/AGGRESSIVE PARLAY
+            const aggPar = parlays.moonshot || parlays.aggressive;
+            if (aggPar && aggPar.legs && aggPar.legs.length > 0) {
+                strategiesHTML += createCompactParlayCard(aggPar, 'moonshot');
             }
         }
         
         suggestedList.innerHTML = strategiesHTML;
         
-        // Display all props
+        // Display all props - allProps already have playerId from server
         const allPropsList = document.getElementById('allPropsList');
-        allPropsList.innerHTML = data.allProps.map(prop => createPropCard(prop, false, data.sport)).join('');
+        if (data.allProps && Array.isArray(data.allProps)) {
+            const formattedProps = data.allProps.map(prop => ({
+                ...prop,
+                prop: prop.propType || prop.prop,
+                over: prop.line,
+                under: prop.line,
+                recommendation: prop.pick || 'PASS'
+            }));
+            allPropsList.innerHTML = formattedProps.map(prop => createPropCard(prop, false, data.sport)).join('');
+        } else {
+            console.error('❌ allProps missing or not an array:', data);
+            allPropsList.innerHTML = '<p style="color: #888; padding: 20px;">No props available</p>';
+        }
         
         // Show results
         document.getElementById('parlayLoading').style.display = 'none';
@@ -1335,7 +1407,7 @@ function createPropCard(prop, isSuggested, sport = 'nfl') {
                         <span class="player-team">${prop.team}${prop.position ? ' ' + prop.position : ''}</span>
                     </div>
                 </div>
-                <span class="confidence-badge-small ${prop.confidence.toLowerCase()}">${prop.confidence}</span>
+                <span class="confidence-badge-small ${typeof prop.confidence === 'number' ? (prop.confidence >= 70 ? 'high' : prop.confidence >= 55 ? 'medium' : 'low') : (prop.confidence ? prop.confidence.toLowerCase() : 'low')}">${typeof prop.confidence === 'number' ? Math.round(prop.confidence) + '%' : prop.confidence}</span>
             </div>
             <div class="prop-details">
                 <div class="prop-type">${prop.prop}</div>
@@ -1359,6 +1431,138 @@ function createPropCard(prop, isSuggested, sport = 'nfl') {
             </div>
         </div>
     `;
+}
+
+// 🔥 NEW: Smart prop card with confidence scores
+function createSmartPropCard(leg, sport = 'nfl') {
+    const recClass = leg.pick === 'OVER' ? 'rec-over' : 
+                     leg.pick === 'UNDER' ? 'rec-under' : 'rec-pass';
+    
+    // Generate player image URL based on sport
+    let playerImageUrl;
+    let fallbackImage;
+    
+    if (sport === 'nba') {
+        fallbackImage = 'https://cdn.nba.com/headshots/nba/latest/260x190/fallback.png';
+        playerImageUrl = leg.playerId 
+            ? `https://cdn.nba.com/headshots/nba/latest/1040x760/${leg.playerId}.png`
+            : fallbackImage;
+    } else {
+        playerImageUrl = leg.playerId 
+            ? `https://sleepercdn.com/content/nfl/players/${leg.playerId}.jpg`
+            : `https://sleepercdn.com/images/v2/icons/player_default.webp`;
+        fallbackImage = 'https://sleepercdn.com/images/v2/icons/player_default.webp';
+    }
+    
+    // Determine confidence badge color
+    const confScore = leg.confidenceScore || 0;
+    let confClass = 'low';
+    if (confScore >= 70) confClass = 'high';
+    else if (confScore >= 60) confClass = 'medium';
+    
+    return `
+        <div class="prop-card smart-prop ${recClass}">
+            <div class="prop-header">
+                <div class="prop-player">
+                    <img src="${playerImageUrl}" 
+                         alt="${leg.player}" 
+                         class="player-headshot"
+                         onerror="this.src='${fallbackImage}'">
+                    <div class="player-info">
+                        <span class="player-name">${leg.player}</span>
+                        <span class="player-team">${leg.team}</span>
+                    </div>
+                </div>
+                <span class="confidence-score ${confClass}">${confScore.toFixed(0)}% CONF</span>
+            </div>
+            <div class="prop-details">
+                <div class="prop-type">${leg.prop}</div>
+                <div class="prop-line">
+                    <span class="line-label">Line:</span>
+                    <span class="line-value">${leg.line}</span>
+                    <span class="line-label">Proj:</span>
+                    <span class="line-value projection">${leg.projection.toFixed(1)}</span>
+                </div>
+                <div class="prop-recommendation smart-pick">
+                    <strong>PICK: ${leg.pick} ${leg.line}</strong>
+                    <span class="edge-indicator">Edge: ${leg.edge.toFixed(1)}</span>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// Show player last 6 games stats
+async function showPlayerStats(playerName, team, propType) {
+    try {
+        // Fetch player game log from server
+        const response = await fetch(`${API_BASE}/nba/player-gamelog?player=${encodeURIComponent(playerName)}&team=${team}`);
+        const data = await response.json();
+        
+        if (!data.games || data.games.length === 0) {
+            alert(`No recent game data available for ${playerName}`);
+            return;
+        }
+        
+        // Create modal HTML
+        const modalHTML = `
+            <div id="playerStatsModal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center;" onclick="closePlayerStatsModal()">
+                <div style="background: var(--bg-primary); border-radius: 16px; padding: 2rem; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 2px solid var(--border-color);" onclick="event.stopPropagation()">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                        <h2 style="color: var(--text-primary); margin: 0;">${playerName} - Last 6 Games</h2>
+                        <button onclick="closePlayerStatsModal()" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; padding: 0.5rem;">&times;</button>
+                    </div>
+                    <div style="color: var(--text-secondary); margin-bottom: 1rem;">
+                        <strong>${team}</strong> | ${propType}
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        ${data.games.map((game, idx) => `
+                            <div style="background: var(--bg-secondary); padding: 1rem; border-radius: 8px; border-left: 4px solid ${getStatColor(game, propType)};">
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                    <span style="color: var(--text-primary); font-weight: 600;">Game ${idx + 1}: vs ${game.opponent}</span>
+                                    <span style="color: var(--text-secondary); font-size: 0.9rem;">${game.date}</span>
+                                </div>
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.9rem;">
+                                    <div><span style="color: var(--text-secondary);">PTS:</span> <strong style="color: var(--text-primary);">${game.points}</strong></div>
+                                    <div><span style="color: var(--text-secondary);">REB:</span> <strong style="color: var(--text-primary);">${game.rebounds}</strong></div>
+                                    <div><span style="color: var(--text-secondary);">AST:</span> <strong style="color: var(--text-primary);">${game.assists}</strong></div>
+                                    <div><span style="color: var(--text-secondary);">MIN:</span> <strong style="color: var(--text-primary);">${game.minutes}</strong></div>
+                                    <div><span style="color: var(--text-secondary);">FG:</span> <strong style="color: var(--text-primary);">${game.fgMade}/${game.fgAttempts}</strong></div>
+                                    <div><span style="color: var(--text-secondary);">3PT:</span> <strong style="color: var(--text-primary);">${game.fg3Made}</strong></div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
+                        <div style="color: var(--text-primary); font-weight: 600; margin-bottom: 0.5rem;">6-Game Averages:</div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.9rem;">
+                            <div><span style="color: var(--text-secondary);">PTS:</span> <strong style="color: var(--accent-blue);">${data.averages.points.toFixed(1)}</strong></div>
+                            <div><span style="color: var(--text-secondary);">REB:</span> <strong style="color: var(--accent-blue);">${data.averages.rebounds.toFixed(1)}</strong></div>
+                            <div><span style="color: var(--text-secondary);">AST:</span> <strong style="color: var(--accent-blue);">${data.averages.assists.toFixed(1)}</strong></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+    } catch (error) {
+        console.error('Error fetching player stats:', error);
+        alert('Failed to load player stats');
+    }
+}
+
+function closePlayerStatsModal() {
+    const modal = document.getElementById('playerStatsModal');
+    if (modal) modal.remove();
+}
+
+function getStatColor(game, propType) {
+    // Color based on performance
+    if (propType.includes('Points') && game.points >= 20) return 'var(--accent-green)';
+    if (propType.includes('Rebounds') && game.rebounds >= 8) return 'var(--accent-green)';
+    if (propType.includes('Assists') && game.assists >= 6) return 'var(--accent-green)';
+    return 'var(--accent-blue)';
 }
 
 // Auto-refresh games every 2 minutes

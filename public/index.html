@@ -483,6 +483,13 @@
                         <select id="parlayGameSelect" class="game-select">
                             <option value="">-- Select a game --</option>
                         </select>
+                        <div class="stats-mode-toggle">
+                            <label class="toggle-label">Stats Mode:</label>
+                            <button id="statsToggleBtn" class="stats-toggle-btn" data-mode="weighted">
+                                <span class="toggle-icon">📊</span>
+                                <span class="toggle-text">Last 6 Games (70%)</span>
+                            </button>
+                        </div>
                         <button id="generateParlayBtn" class="generate-btn" disabled>Generate Parlay</button>
                     </div>
                     
@@ -492,15 +499,9 @@
                     </div>
                     
                     <div id="parlayResults" style="display: none;">
-                        <!-- Suggested Parlay -->
-                        <div class="suggested-parlay">
-                            <h3 class="subsection-title">
-                                🎯 Suggested Parlay
-                                <span id="parlayOdds" class="parlay-odds"></span>
-                            </h3>
-                            <div id="suggestedParlayList" class="parlay-picks">
-                                <!-- Populated by JS -->
-                            </div>
+                        <!-- Suggested Parlays - Compact Cards -->
+                        <div id="suggestedParlayList" class="compact-parlay-container">
+                            <!-- Populated by JS -->
                         </div>
                         
                         <!-- All Props -->
